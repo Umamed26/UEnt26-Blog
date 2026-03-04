@@ -54,7 +54,17 @@ npm run preview
 
 ## 内容写作
 
-在 `src/content/posts` 下新增 Markdown 文件，Frontmatter 示例：
+在 `src/content/posts` 下新增 Markdown 文件。  
+当前 schema（`src/content/config.ts`）要求如下：
+
+- 必填：`title`、`description`、`pubDate`
+- 可选：`updatedDate`、`tags`、`draft`、`pinned`、`cover`、`toc`
+- 约束：
+  - `pinned` 必须是正整数（例如 `1`、`2`）
+  - `draft` 默认 `false`
+  - `toc` 默认 `true`
+
+推荐 Frontmatter 示例：
 
 ```yaml
 ---
