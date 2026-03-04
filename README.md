@@ -80,9 +80,34 @@ toc: true
 ---
 ```
 
-## 部署到 GitHub Pages
+## 双仓部署（源码仓 + 发布仓）
 
-1. 推送代码到 `main` 分支。
-2. 在仓库 `Settings > Pages` 中将 Source 设为 `GitHub Actions`。
-3. 在 `Settings > Secrets and variables > Actions` 中配置可选变量（评论/统计）。
-4. 后续推送会触发工作流自动构建并部署。
+当前仓库是源码仓，发布仓建议使用：`Umamed26/umamed26.github.io`（用户站，根路径访问）。
+
+### 一次性准备
+
+1. 创建发布仓：`umamed26.github.io`（公开仓库）。
+2. 在源码仓 `Settings > Secrets and variables > Actions > Secrets` 新建：
+   - `PUBLISH_REPO_TOKEN`
+3. `PUBLISH_REPO_TOKEN` 需要能推送到发布仓：
+   - 推荐 Fine-grained PAT：只授权发布仓，`Contents: Read and write`
+4. 在源码仓 `Settings > Secrets and variables > Actions > Variables` 配置可选公开变量：
+   - `PUBLIC_GISCUS_REPO`
+   - `PUBLIC_GISCUS_REPO_ID`
+   - `PUBLIC_GISCUS_CATEGORY`
+   - `PUBLIC_GISCUS_CATEGORY_ID`
+   - `PUBLIC_CF_ANALYTICS_TOKEN`
+
+### 自动发布流程
+
+1. 推送源码到本仓库 `main` 分支。
+2. GitHub Actions 执行 `.github/workflows/deploy.yml`：
+   - 构建参数固定为 `SITE_URL=https://umamed26.github.io`、`BASE_PATH=/`
+   - 将 `dist` 自动推送到 `Umamed26/umamed26.github.io` 的 `main` 分支
+3. 部署完成后访问：
+   - `https://umamed26.github.io/`
+
+### 注意
+
+- 发布仓不需要手动改文件，全部由源码仓工作流覆盖更新。
+- 若你的 GitHub 用户名不是 `umamed26`，请把工作流里的仓库地址改成你自己的。
