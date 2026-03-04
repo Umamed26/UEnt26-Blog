@@ -1,0 +1,720 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { getAllPublishedPosts, getPostTags } from "@/utils/posts";
+
+const posts = await getAllPublishedPosts();
+const consolePosts = posts.map((post) => {
+  const updatedDate = post.data.updatedDate;
+  return {
+    slug: post.slug,
+    href: `/posts/${post.slug}/`,
+    title: post.data.title,
+    description: post.data.description,
+    dateISO: post.data.pubDate.toISOString(),
+    dateLabel: post.data.pubDate.toLocaleDateString("zh-CN"),
+    updatedLabel: updatedDate ? updatedDate.toLocaleDateString("zh-CN") : null,
+    timestamp: post.data.pubDate.getTime(),
+    tags: getPostTags(post),
+    body: post.body
+  };
+});
+---
+
+<BaseLayout title="控制台">
+  <section class="surface console-page" data-reveal>
+    <header class="console-head">
+      <p class="section-kicker">Console Navigator</p>
+      <h1 class="page-title">文章控制台</h1>
+      <p class="muted">
+        像终端一样浏览文章。支持分页、搜索、标签过滤、跳页和直接打开文章。
+      </p>
+    </header>
+
+    <div class="console-shell" data-console-shell>
+      <div class="console-top-bar">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="bar-title">UEnt26 Terminal</span>
+      </div>
+
+      <div class="console-output" data-console-output aria-live="polite"></div>
+
+      <form class="console-input-row" data-console-form>
+        <label for="console-input" class="prompt">uent26@blog:~$</label>
+        <input
+          id="console-input"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="输入 help 查看命令"
+          data-console-input
+        />
+        <button type="submit" class="run-btn">执行</button>
+      </form>
+
+      <div class="console-footer">
+        <div class="quick-list">
+          <button type="button" data-console-command="help">help</button>
+          <button type="button" data-console-command="list">list</button>
+          <button type="button" data-console-command="read 1">read 1</button>
+          <button type="button" data-console-command="next">next</button>
+          <button type="button" data-console-command="prev">prev</button>
+          <button type="button" data-console-command="reset">reset</button>
+          <button type="button" data-console-command="count">count</button>
+        </div>
+        <p class="muted status" data-console-status>
+          已载入 {consolePosts.length} 篇文章。
+        </p>
+      </div>
+    </div>
+
+    <noscript>
+      <div class="surface noscript-fallback">
+        <p class="muted">已关闭 JavaScript，以下展示静态文章列表：</p>
+        <ul>
+          {consolePosts.map((post) => (
+            <li>
+              <a href={post.href}>{post.title}</a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </noscript>
+
+    <script type="application/json" id="console-posts" set:html={JSON.stringify(consolePosts)}></script>
+    <script is:inline>
+      (() => {
+        const dataNode = document.getElementById("console-posts");
+        const output = document.querySelector("[data-console-output]");
+        const form = document.querySelector("[data-console-form]");
+        const input = document.querySelector("[data-console-input]");
+        const status = document.querySelector("[data-console-status]");
+        const quickButtons = [...document.querySelectorAll("[data-console-command]")];
+
+        if (
+          !(dataNode instanceof HTMLScriptElement) ||
+          !(output instanceof HTMLElement) ||
+          !(form instanceof HTMLFormElement) ||
+          !(input instanceof HTMLInputElement) ||
+          !(status instanceof HTMLElement)
+        ) {
+          return;
+        }
+
+        let allPosts = [];
+        try {
+          allPosts = JSON.parse(dataNode.textContent || "[]");
+        } catch {
+          return;
+        }
+
+        if (!Array.isArray(allPosts)) {
+          return;
+        }
+
+        const PAGE_SIZE = 5;
+        const state = {
+          page: 1,
+          keyword: "",
+          tag: "",
+          filtered: allPosts
+        };
+
+        const clampPage = () => {
+          const totalPages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
+          state.page = Math.max(1, Math.min(totalPages, state.page));
+          return totalPages;
+        };
+
+        const escapeText = (value) => {
+          const span = document.createElement("span");
+          span.textContent = value;
+          return span.textContent || "";
+        };
+
+        const appendLine = (text, kind = "info") => {
+          const line = document.createElement("div");
+          line.className = `line line-${kind}`;
+          line.textContent = text;
+          if (kind === "error") {
+            line.setAttribute("role", "alert");
+          }
+          output.append(line);
+          if (output.childElementCount > 220) {
+            output.firstElementChild?.remove();
+          }
+          output.scrollTop = output.scrollHeight;
+        };
+
+        const appendHtmlLine = (prefix, post) => {
+          const line = document.createElement("div");
+          line.className = "line line-link";
+
+          const text = document.createElement("span");
+          text.textContent = prefix;
+          const link = document.createElement("a");
+          link.href = post.href;
+          link.textContent = post.title;
+
+          line.append(text, link);
+          output.append(line);
+          if (output.childElementCount > 220) {
+            output.firstElementChild?.remove();
+          }
+          output.scrollTop = output.scrollHeight;
+        };
+
+        const updateStatus = () => {
+          const totalPages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
+          const activeKeyword = state.keyword ? `关键词: "${state.keyword}"` : "";
+          const activeTag = state.tag ? `标签: #${state.tag}` : "";
+          const filters = [activeKeyword, activeTag].filter(Boolean).join(" | ");
+          status.textContent = `当前第 ${state.page}/${totalPages} 页，每页 ${PAGE_SIZE} 条。匹配 ${state.filtered.length}/${allPosts.length} 篇${
+            filters ? `（${filters}）` : ""
+          }。`;
+        };
+
+        const applyFilters = () => {
+          const keyword = state.keyword.trim().toLowerCase();
+          const tag = state.tag.trim().toLowerCase();
+
+          state.filtered = allPosts.filter((post) => {
+            if (tag && !post.tags.includes(tag)) {
+              return false;
+            }
+            if (!keyword) {
+              return true;
+            }
+            return (
+              post.title.toLowerCase().includes(keyword) ||
+              (post.description || "").toLowerCase().includes(keyword) ||
+              post.slug.toLowerCase().includes(keyword) ||
+              post.tags.some((item) => item.includes(keyword))
+            );
+          });
+
+          clampPage();
+          updateStatus();
+        };
+
+        const printList = () => {
+          const totalPages = clampPage();
+          if (state.filtered.length === 0) {
+            appendLine("没有匹配文章，试试 reset 或 search 新关键词。", "error");
+            updateStatus();
+            return;
+          }
+
+          const start = (state.page - 1) * PAGE_SIZE;
+          const slice = state.filtered.slice(start, start + PAGE_SIZE);
+          appendLine(`Page ${state.page}/${totalPages} · 显示 ${start + 1}-${start + slice.length}`, "meta");
+
+          for (const [idx, post] of slice.entries()) {
+            const globalIndex = start + idx + 1;
+            const dateInfo = post.updatedLabel
+              ? `${post.dateLabel} | 更新 ${post.updatedLabel}`
+              : post.dateLabel;
+            const prefix = `[${globalIndex}] ${dateInfo} `;
+            appendHtmlLine(prefix, post);
+            if (post.description) {
+              appendLine(`  摘要: ${post.description}`, "meta");
+            }
+            if (Array.isArray(post.tags) && post.tags.length > 0) {
+              appendLine(`  标签: ${post.tags.map((item) => `#${item}`).join(" ")}`, "meta");
+            }
+          }
+
+          updateStatus();
+        };
+
+        const resolveTarget = (arg) => {
+          if (!arg) {
+            return null;
+          }
+
+          let target = null;
+          if (/^\d+$/.test(arg)) {
+            const index = Number(arg) - 1;
+            target = state.filtered[index] ?? null;
+          } else {
+            const slug = arg.toLowerCase().trim();
+            target = state.filtered.find((post) => post.slug.toLowerCase() === slug) ?? null;
+            if (!target) {
+              target = allPosts.find((post) => post.slug.toLowerCase() === slug) ?? null;
+            }
+          }
+
+          return target;
+        };
+
+        const openPost = (arg) => {
+          if (!arg) {
+            appendLine("用法: open <序号|slug>", "error");
+            return;
+          }
+
+          const target = resolveTarget(arg);
+          if (!target) {
+            appendLine(`未找到文章: ${arg}`, "error");
+            return;
+          }
+
+          appendHtmlLine("打开文章 -> ", target);
+          if (target.description) {
+            appendLine(`  摘要: ${target.description}`, "meta");
+          }
+          if (Array.isArray(target.tags) && target.tags.length > 0) {
+            appendLine(`  标签: ${target.tags.map((item) => `#${item}`).join(" ")}`, "meta");
+          }
+        };
+
+        const readPost = (arg) => {
+          if (!arg) {
+            appendLine("用法: read <序号|slug>", "error");
+            return;
+          }
+
+          const target = resolveTarget(arg);
+          if (!target) {
+            appendLine(`未找到文章: ${arg}`, "error");
+            return;
+          }
+
+          appendLine(`----- ${target.title} -----`, "meta");
+          appendLine(
+            `slug: ${target.slug} | 发布: ${target.dateLabel}${target.updatedLabel ? ` | 更新: ${target.updatedLabel}` : ""}`,
+            "meta"
+          );
+          if (Array.isArray(target.tags) && target.tags.length > 0) {
+            appendLine(`tags: ${target.tags.map((item) => `#${item}`).join(" ")}`, "meta");
+          }
+
+          const body = (target.body || "").trim();
+          if (!body) {
+            appendLine("正文为空。", "error");
+            appendLine(`----- END ${target.slug} -----`, "meta");
+            return;
+          }
+
+          for (const line of body.split(/\r?\n/)) {
+            appendLine(line.length ? `  ${line}` : " ");
+          }
+          appendLine(`----- END ${target.slug} -----`, "meta");
+        };
+
+        const printHelp = () => {
+          appendLine("可用命令：", "meta");
+          appendLine("help | h                      显示帮助", "meta");
+          appendLine("list | ls                     列出当前页文章（标题/摘要/标签）", "meta");
+          appendLine("next | n                      下一页", "meta");
+          appendLine("prev | p                      上一页", "meta");
+          appendLine("page <数字>                   跳转到指定页", "meta");
+          appendLine("open <序号|slug>              打开文章", "meta");
+          appendLine("read <序号|slug>              在控制台显示正文", "meta");
+          appendLine("cat/view <序号|slug>          read 命令别名", "meta");
+          appendLine("search <关键词>               标题/摘要/标签搜索", "meta");
+          appendLine("tag <标签>                    按标签过滤，如 tag astro", "meta");
+          appendLine("count                         查看当前匹配统计", "meta");
+          appendLine("reset                         清空筛选并回到第一页", "meta");
+          appendLine("clear                         清空屏幕输出", "meta");
+        };
+
+        const execute = (rawInput, fromQuick = false) => {
+          const commandText = rawInput.trim();
+          if (!commandText) {
+            return;
+          }
+
+          if (!fromQuick) {
+            appendLine(`$ ${commandText}`, "command");
+          }
+
+          const [cmdRaw, ...rest] = commandText.split(/\s+/);
+          const cmd = cmdRaw.toLowerCase();
+          const arg = rest.join(" ").trim();
+
+          if (cmd === "help" || cmd === "h") {
+            printHelp();
+            return;
+          }
+
+          if (cmd === "list" || cmd === "ls") {
+            printList();
+            return;
+          }
+
+          if (cmd === "next" || cmd === "n") {
+            state.page += 1;
+            const totalPages = clampPage();
+            if (state.page >= totalPages && totalPages === clampPage()) {
+              state.page = totalPages;
+            }
+            printList();
+            return;
+          }
+
+          if (cmd === "prev" || cmd === "p") {
+            state.page -= 1;
+            if (state.page < 1) {
+              state.page = 1;
+            }
+            printList();
+            return;
+          }
+
+          if (cmd === "page") {
+            const target = Number(arg);
+            if (!arg || Number.isNaN(target) || target < 1) {
+              appendLine("用法: page <正整数>", "error");
+              return;
+            }
+            state.page = target;
+            clampPage();
+            printList();
+            return;
+          }
+
+          if (cmd === "open") {
+            openPost(arg);
+            return;
+          }
+
+          if (cmd === "read" || cmd === "cat" || cmd === "view") {
+            readPost(arg);
+            return;
+          }
+
+          if (cmd === "search") {
+            state.keyword = arg;
+            state.page = 1;
+            applyFilters();
+            appendLine(`已更新关键词搜索: ${arg || "(空)"}`, "meta");
+            printList();
+            return;
+          }
+
+          if (cmd === "tag") {
+            state.tag = arg.replace(/^#/, "");
+            state.page = 1;
+            applyFilters();
+            appendLine(`已更新标签过滤: ${state.tag || "(空)"}`, "meta");
+            printList();
+            return;
+          }
+
+          if (cmd === "count") {
+            updateStatus();
+            appendLine(status.textContent || "暂无统计。", "meta");
+            return;
+          }
+
+          if (cmd === "reset") {
+            state.page = 1;
+            state.keyword = "";
+            state.tag = "";
+            applyFilters();
+            appendLine("已重置筛选。", "meta");
+            printList();
+            return;
+          }
+
+          if (cmd === "clear") {
+            output.replaceChildren();
+            appendLine("已清空屏幕。输入 help 查看命令。", "meta");
+            updateStatus();
+            return;
+          }
+
+          appendLine(`未知命令: ${escapeText(commandText)}。输入 help 查看命令。`, "error");
+        };
+
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          execute(input.value);
+          input.value = "";
+        });
+
+        for (const button of quickButtons) {
+          if (!(button instanceof HTMLButtonElement)) {
+            continue;
+          }
+          button.addEventListener("click", () => {
+            const command = button.dataset.consoleCommand || "";
+            execute(command, true);
+            input.focus();
+          });
+        }
+
+        applyFilters();
+        appendLine(`Console ready. 已载入 ${allPosts.length} 篇文章。`, "meta");
+        appendLine("输入 help 查看命令，输入 list 浏览第一页。", "meta");
+        printList();
+        input.focus();
+      })();
+    </script>
+  </section>
+</BaseLayout>
+
+<style>
+  .console-page {
+    padding: clamp(1rem, 2.4vw, 1.5rem);
+    border-radius: var(--radius-lg);
+    display: grid;
+    gap: 1rem;
+  }
+
+  .console-head {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .console-shell {
+    border-radius: 18px;
+    border: 1px solid rgba(45, 59, 75, 0.95);
+    background:
+      radial-gradient(circle at 98% -10%, rgba(86, 198, 194, 0.14), transparent 40%),
+      radial-gradient(circle at -8% 108%, rgba(241, 141, 85, 0.14), transparent 42%),
+      #0b1118;
+    box-shadow: inset 0 0 0 1px rgba(86, 198, 194, 0.1), 0 24px 58px rgba(0, 0, 0, 0.38);
+    color: #dce8f7;
+    overflow: hidden;
+  }
+
+  .console-top-bar {
+    min-height: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.5rem 0.82rem;
+    border-bottom: 1px solid rgba(86, 198, 194, 0.16);
+    background: rgba(12, 20, 29, 0.86);
+  }
+
+  .dot {
+    width: 0.58rem;
+    height: 0.58rem;
+    border-radius: 50%;
+    background: linear-gradient(140deg, rgba(241, 141, 85, 0.9), rgba(241, 141, 85, 0.45));
+  }
+
+  .dot:nth-child(2) {
+    background: linear-gradient(140deg, rgba(244, 188, 73, 0.9), rgba(244, 188, 73, 0.45));
+  }
+
+  .dot:nth-child(3) {
+    background: linear-gradient(140deg, rgba(86, 198, 194, 0.9), rgba(86, 198, 194, 0.45));
+  }
+
+  .bar-title {
+    margin-left: 0.4rem;
+    color: #9ab0cc;
+    letter-spacing: 0.08em;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .console-output {
+    min-height: 360px;
+    max-height: 420px;
+    overflow: auto;
+    padding: 0.82rem;
+    display: grid;
+    gap: 0.5rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.84rem;
+    line-height: 1.56;
+    background:
+      linear-gradient(180deg, rgba(10, 15, 22, 0.3), transparent 16%),
+      repeating-linear-gradient(0deg, transparent 0 30px, rgba(86, 198, 194, 0.03) 30px 31px);
+  }
+
+  .line {
+    color: #dce8f7;
+    word-break: break-word;
+  }
+
+  .line-command {
+    color: #9ab0cc;
+  }
+
+  .line-meta {
+    color: #8ed4d2;
+  }
+
+  .line-error {
+    color: #ffb89f;
+  }
+
+  .line-link {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: baseline;
+  }
+
+  .line-link a {
+    color: #f0f7ff;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .line-link a:hover {
+    color: #9ee9e6;
+  }
+
+  .console-input-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: center;
+    border-top: 1px solid rgba(86, 198, 194, 0.16);
+    padding: 0.7rem 0.82rem;
+    background: rgba(8, 13, 20, 0.86);
+  }
+
+  .prompt {
+    color: #8ed4d2;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .console-input-row input {
+    border: 1px solid rgba(86, 198, 194, 0.34);
+    background: rgba(11, 18, 26, 0.9);
+    color: #e7f1ff;
+    border-radius: 10px;
+    min-height: 2.2rem;
+    padding: 0.36rem 0.62rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.84rem;
+  }
+
+  .console-input-row input::placeholder {
+    color: #7890ae;
+  }
+
+  .console-input-row input:focus-visible {
+    border-color: rgba(158, 233, 230, 0.85);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(86, 198, 194, 0.24);
+  }
+
+  .run-btn {
+    border: 1px solid rgba(241, 141, 85, 0.55);
+    border-radius: 999px;
+    min-height: 2.2rem;
+    padding-inline: 0.75rem;
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.26), rgba(241, 141, 85, 0.1));
+    color: #ffbc9f;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      transform 200ms var(--ease-out),
+      border-color 200ms var(--ease-out),
+      background 200ms var(--ease-out);
+  }
+
+  .run-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(241, 141, 85, 0.72);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.34), rgba(241, 141, 85, 0.18));
+  }
+
+  .console-footer {
+    border-top: 1px solid rgba(86, 198, 194, 0.16);
+    padding: 0.7rem 0.82rem 0.82rem;
+    background: rgba(8, 13, 20, 0.72);
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .quick-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+  }
+
+  .quick-list button {
+    border-radius: 999px;
+    border: 1px solid rgba(86, 198, 194, 0.35);
+    background: rgba(86, 198, 194, 0.1);
+    color: #9ee9e6;
+    min-height: 1.9rem;
+    padding-inline: 0.62rem;
+    font-size: 0.75rem;
+    font-family: "IBM Plex Mono", monospace;
+    cursor: pointer;
+    transition:
+      transform 180ms var(--ease-out),
+      background 180ms var(--ease-out),
+      border-color 180ms var(--ease-out);
+  }
+
+  .quick-list button:hover {
+    transform: translateY(-1px);
+    border-color: rgba(86, 198, 194, 0.56);
+    background: rgba(86, 198, 194, 0.2);
+  }
+
+  .status {
+    margin: 0;
+    font-size: 0.84rem;
+    color: #9ab0cc;
+  }
+
+  .noscript-fallback {
+    margin-top: 0.6rem;
+    padding: 1rem;
+  }
+
+  .noscript-fallback ul {
+    margin: 0.6rem 0 0;
+    padding-left: 1rem;
+  }
+
+  .noscript-fallback li + li {
+    margin-top: 0.4rem;
+  }
+
+  .noscript-fallback a {
+    color: var(--accent);
+  }
+
+  @media (max-width: 760px) {
+    .console-output {
+      min-height: 300px;
+      max-height: 360px;
+    }
+
+    .console-input-row {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+
+    .prompt {
+      font-size: 0.74rem;
+    }
+
+    .run-btn {
+      width: fit-content;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .run-btn,
+    .quick-list button {
+      transition: none !important;
+    }
+
+    .run-btn:hover,
+    .quick-list button:hover {
+      transform: none;
+    }
+  }
+</style>

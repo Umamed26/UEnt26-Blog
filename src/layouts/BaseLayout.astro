@@ -24,6 +24,7 @@ const socialImage = image ? new URL(image, siteConfig.siteUrl).toString() : unde
 const currentPath = Astro.url.pathname;
 const navItems = [
   { href: "/", label: "首页" },
+  { href: "/console/", label: "控制台" },
   { href: "/tags/", label: "标签" },
   { href: "/archive/", label: "归档" },
   { href: "/about/", label: "关于" }
