@@ -1,13 +1,14 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import { getAllPublishedPosts, getPostTags } from "@/utils/posts";
+import { withBasePath } from "@/utils/paths";
 
 const posts = await getAllPublishedPosts();
 const consolePosts = posts.map((post) => {
   const updatedDate = post.data.updatedDate;
   return {
     slug: post.slug,
-    href: `/posts/${post.slug}/`,
+    href: withBasePath(`/posts/${post.slug}/`),
     title: post.data.title,
     description: post.data.description,
     dateISO: post.data.pubDate.toISOString(),

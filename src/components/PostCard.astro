@@ -1,6 +1,7 @@
 ---
 import type { PostEntry } from "@/utils/posts";
 import { getPostTags, tagToUrlSegment } from "@/utils/posts";
+import { withBasePath } from "@/utils/paths";
 import TagPill from "@/components/TagPill.astro";
 
 type Props = {
@@ -11,6 +12,7 @@ type Props = {
 const { post, variant = "default" } = Astro.props as Props;
 const tags = getPostTags(post);
 const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.data.cover?.src;
+const postHref = withBasePath(`/posts/${post.slug}/`);
 ---
 
 <article class:list={["surface card", variant]}>
@@ -32,17 +34,17 @@ const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.da
       )}
     </p>
     <h2>
-      <a href={`/posts/${post.slug}/`}>{post.data.title}</a>
+      <a href={postHref}>{post.data.title}</a>
     </h2>
     <p class="muted summary">{post.data.description}</p>
     {tags.length > 0 && (
       <div class="tags" aria-label="文章标签">
         {tags.map((tag) => (
-          <TagPill tag={tag} href={`/tags/${tagToUrlSegment(tag)}/`} />
+          <TagPill tag={tag} href={withBasePath(`/tags/${tagToUrlSegment(tag)}/`)} />
         ))}
       </div>
     )}
-    <a class="read-more" href={`/posts/${post.slug}/`}>阅读全文</a>
+    <a class="read-more" href={postHref}>阅读全文</a>
   </div>
 </article>
 

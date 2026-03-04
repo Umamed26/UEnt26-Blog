@@ -1,4 +1,6 @@
 ---
+import { withBasePath } from "@/utils/paths";
+
 type Props = {
   tag: string;
   href?: string;
@@ -6,10 +8,11 @@ type Props = {
 };
 
 const { tag, href, count } = Astro.props as Props;
+const resolvedHref = href ? withBasePath(href) : undefined;
 ---
 
-{href ? (
-  <a class="tag-pill" href={href}>
+{resolvedHref ? (
+  <a class="tag-pill" href={resolvedHref}>
     <span>#{tag}</span>
     {typeof count === "number" && <small>{count}</small>}
   </a>

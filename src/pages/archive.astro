@@ -1,9 +1,11 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import { getAllPublishedPosts, getPostTags, tagToUrlSegment } from "@/utils/posts";
+import { withBasePath } from "@/utils/paths";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 const getDateKey = (date: Date) => date.toISOString().slice(0, 10);
+const tagBaseHref = withBasePath("/tags/");
 
 const posts = await getAllPublishedPosts();
 
@@ -17,7 +19,7 @@ const archiveItems = posts.map((post) => {
 
   return {
     slug: post.slug,
-    href: `/posts/${post.slug}/`,
+    href: withBasePath(`/posts/${post.slug}/`),
     title: post.data.title,
     description: post.data.description,
     tags,
@@ -190,7 +192,7 @@ const fallbackGroups = archiveYears.map((year) => ({
                       {item.tags.length > 0 && (
                         <div class="archive-tags">
                           {item.tags.map((tag) => (
-                            <a class="archive-tag" href={`/tags/${tagToUrlSegment(tag)}/`}>
+                            <a class="archive-tag" href={withBasePath(`/tags/${tagToUrlSegment(tag)}/`)}>
                               #{tag}
                             </a>
                           ))}
@@ -213,7 +215,7 @@ const fallbackGroups = archiveYears.map((year) => ({
           id="archive-data"
           set:html={JSON.stringify({ items: archiveItems, allTags })}
         ></script>
-        <script is:inline>
+        <script is:inline define:vars={{ tagBaseHref }}>
           (() => {
             const dataNode = document.getElementById("archive-data");
             const output = document.querySelector("[data-archive-output]");
@@ -500,7 +502,7 @@ const fallbackGroups = archiveYears.map((year) => ({
                   for (const tag of item.tags) {
                     const tagNode = document.createElement("a");
                     tagNode.className = "archive-tag";
-                    tagNode.href = `/tags/${encodeURIComponent(tag)}/`;
+                    tagNode.href = `${tagBaseHref}${encodeURIComponent(tag)}/`;
                     tagNode.textContent = `#${tag}`;
                     tagWrap.append(tagNode);
                   }

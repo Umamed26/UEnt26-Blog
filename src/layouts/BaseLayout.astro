@@ -2,6 +2,7 @@
 import AnalyticsScript from "@/components/AnalyticsScript.astro";
 import MotionController from "@/components/MotionController.astro";
 import { siteConfig } from "@/config/site";
+import { stripBasePath, withBasePath } from "@/utils/paths";
 import "@/styles/global.css";
 
 type Props = {
@@ -14,14 +15,16 @@ type Props = {
 const {
   title,
   description = siteConfig.description,
-  canonicalPath = Astro.url.pathname,
+  canonicalPath = stripBasePath(Astro.url.pathname),
   image
 } = Astro.props as Props;
 
 const pageTitle = title ? `${title} | ${siteConfig.title}` : siteConfig.title;
-const canonical = new URL(canonicalPath, siteConfig.siteUrl).toString();
+const canonical = /^https?:\/\//i.test(canonicalPath)
+  ? canonicalPath
+  : new URL(withBasePath(canonicalPath), siteConfig.siteUrl).toString();
 const socialImage = image ? new URL(image, siteConfig.siteUrl).toString() : undefined;
-const currentPath = Astro.url.pathname;
+const currentPath = stripBasePath(Astro.url.pathname);
 const navItems = [
   { href: "/", label: "首页" },
   { href: "/console/", label: "控制台" },
@@ -30,6 +33,7 @@ const navItems = [
   { href: "/about/", label: "关于" }
 ];
 const darkThemeColor = "#0f151c";
+const resolveHref = (href: string) => (href.startsWith("/") ? withBasePath(href) : href);
 
 const isNavActive = (href: string) => {
   if (href === "/") {
@@ -64,7 +68,7 @@ const isNavActive = (href: string) => {
     {socialImage && <meta property="og:image" content={socialImage} />}
     {socialImage && <meta name="twitter:image" content={socialImage} />}
     <link rel="canonical" href={canonical} />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href={resolveHref("/favicon.svg")} />
     <script is:inline>
       (() => {
         const STORAGE_KEY = "uent26-theme";
@@ -110,7 +114,7 @@ const isNavActive = (href: string) => {
 
     <header class="site-header">
       <div class="container nav-wrap">
-        <a class="brand" href="/">
+        <a class="brand" href={resolveHref("/")}>
           <strong>UEnt26</strong>
           <span>Notes from the Frontend Desk</span>
         </a>
@@ -118,7 +122,7 @@ const isNavActive = (href: string) => {
           <ul class="nav-list">
             {navItems.map((item) => (
               <li>
-                <a class:list={["nav-link", { active: isNavActive(item.href) }]} href={item.href}>
+                <a class:list={["nav-link", { active: isNavActive(item.href) }]} href={resolveHref(item.href)}>
                   {item.label}
                 </a>
               </li>
@@ -126,7 +130,7 @@ const isNavActive = (href: string) => {
           </ul>
         </nav>
         <div class="header-actions">
-          <a class="header-cta" href="/rss.xml">订阅 RSS</a>
+          <a class="header-cta" href={resolveHref("/rss.xml")}>订阅 RSS</a>
           <button
             class="theme-toggle"
             type="button"
@@ -150,7 +154,7 @@ const isNavActive = (href: string) => {
         <p class="copyright">© {new Date().getFullYear()} {siteConfig.author}. All rights reserved.</p>
         <ul class="social-list" aria-label="社交链接">
           {siteConfig.socialLinks.map((item) => (
-            <li><a href={item.href}>{item.label}</a></li>
+            <li><a href={resolveHref(item.href)}>{item.label}</a></li>
           ))}
         </ul>
       </div>

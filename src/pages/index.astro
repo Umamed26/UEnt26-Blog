@@ -4,6 +4,7 @@ import Pagination from "@/components/Pagination.astro";
 import PostCard from "@/components/PostCard.astro";
 import TagPill from "@/components/TagPill.astro";
 import { siteConfig } from "@/config/site";
+import { withBasePath } from "@/utils/paths";
 import {
   getAllPublishedPosts,
   getTagsWithCount,
@@ -33,8 +34,8 @@ const heroStats = [
       <h1 class="page-title">{siteConfig.title}</h1>
       <p class="muted intro">{siteConfig.description}</p>
       <div class="hero-links">
-        <a class="hero-primary" href="/archive/">阅读全部文章</a>
-        <a class="hero-secondary" href="/about/">关于作者</a>
+        <a class="hero-primary" href={withBasePath("/archive/")}>阅读全部文章</a>
+        <a class="hero-secondary" href={withBasePath("/about/")}>关于作者</a>
       </div>
     </div>
 
@@ -81,7 +82,7 @@ const heroStats = [
         <h2 id="latest-title" class="section-title">最新文章</h2>
         <p class="muted section-sub">按时间顺序浏览全部更新。</p>
       </div>
-      <a class="link" href="/archive/">全部文章</a>
+      <a class="link" href={withBasePath("/archive/")}>全部文章</a>
     </div>
 
     {pagePosts.length > 0 ? (
@@ -111,7 +112,11 @@ const heroStats = [
     {hotTags.length > 0 ? (
       <div class="tag-list">
         {hotTags.map((item) => (
-          <TagPill tag={item.tag} count={item.count} href={`/tags/${tagToUrlSegment(item.tag)}/`} />
+          <TagPill
+            tag={item.tag}
+            count={item.count}
+            href={withBasePath(`/tags/${tagToUrlSegment(item.tag)}/`)}
+          />
         ))}
       </div>
     ) : (

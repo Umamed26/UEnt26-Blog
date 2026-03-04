@@ -1,4 +1,6 @@
 ---
+import { withBasePath } from "@/utils/paths";
+
 type Props = {
   currentPage: number;
   totalPages: number;
@@ -12,7 +14,8 @@ if (totalPages <= 1) {
   return null;
 }
 
-const buildUrl = (page: number) => (page <= 1 ? firstPageUrl : `${baseUrl}/${page}/`);
+const buildUrl = (page: number) =>
+  page <= 1 ? withBasePath(firstPageUrl) : withBasePath(`${baseUrl}/${page}/`);
 
 const windowSize = 2;
 const pages = Array.from({ length: totalPages }, (_, index) => index + 1).filter((page) => {
