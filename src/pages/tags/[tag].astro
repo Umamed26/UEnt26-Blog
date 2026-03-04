@@ -1,0 +1,72 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Pagination from "@/components/Pagination.astro";
+import PostCard from "@/components/PostCard.astro";
+import { siteConfig } from "@/config/site";
+import {
+  getAllPublishedPosts,
+  getPostsByTag,
+  getTagsWithCount,
+  tagToParam,
+  tagToUrlSegment,
+  type PostEntry
+} from "@/utils/posts";
+
+type Props = {
+  tag: string;
+  posts: PostEntry[];
+  totalPages: number;
+  totalCount: number;
+};
+
+export async function getStaticPaths() {
+  const posts = await getAllPublishedPosts();
+  const tags = getTagsWithCount(posts).map((item) => item.tag);
+
+  return tags.map((tag) => {
+    const tagPosts = getPostsByTag(posts, tag);
+    const totalPages = Math.max(1, Math.ceil(tagPosts.length / siteConfig.postsPerPage));
+
+    return {
+      params: { tag: tagToParam(tag) },
+      props: {
+        tag,
+        posts: tagPosts.slice(0, siteConfig.postsPerPage),
+        totalPages,
+        totalCount: tagPosts.length
+      }
+    };
+  });
+}
+
+const { tag, posts, totalPages, totalCount } = Astro.props as Props;
+---
+
+<BaseLayout title={`标签: ${tag}`} canonicalPath={`/tags/${tagToUrlSegment(tag)}/`}>
+  <section class="stack tag-page" data-reveal>
+    <div>
+      <p class="section-kicker">Tag Feed</p>
+      <h1 class="page-title">#{tag}</h1>
+    </div>
+    <p class="muted">共 {totalCount} 篇文章</p>
+
+    <div class="post-grid">
+      {posts.map((post) => (
+        <PostCard post={post} />
+      ))}
+    </div>
+
+    <Pagination
+      currentPage={1}
+      totalPages={totalPages}
+      baseUrl={`/tags/${tagToUrlSegment(tag)}/page`}
+      firstPageUrl={`/tags/${tagToUrlSegment(tag)}/`}
+    />
+  </section>
+</BaseLayout>
+
+<style>
+  .tag-page {
+    gap: 1.05rem;
+  }
+</style>

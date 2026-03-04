@@ -1,0 +1,1143 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { getAllPublishedPosts, getPostTags, tagToUrlSegment } from "@/utils/posts";
+
+const pad = (value: number) => String(value).padStart(2, "0");
+const getDateKey = (date: Date) => date.toISOString().slice(0, 10);
+
+const posts = await getAllPublishedPosts();
+
+const archiveItems = posts.map((post) => {
+  const published = post.data.pubDate;
+  const updated = post.data.updatedDate;
+  const tags = getPostTags(post);
+  const year = String(published.getFullYear());
+  const month = pad(published.getMonth() + 1);
+  const day = pad(published.getDate());
+
+  return {
+    slug: post.slug,
+    href: `/posts/${post.slug}/`,
+    title: post.data.title,
+    description: post.data.description,
+    tags,
+    year,
+    month,
+    day,
+    monthKey: `${year}-${month}`,
+    dayKey: `${year}-${month}-${day}`,
+    dateISO: published.toISOString(),
+    dateKey: getDateKey(published),
+    dateLabel: published.toLocaleDateString("zh-CN"),
+    updatedDateISO: updated ? updated.toISOString() : null,
+    updatedDateLabel: updated ? updated.toLocaleDateString("zh-CN") : null,
+    timestamp: published.getTime()
+  };
+});
+
+const archiveYears = [...new Set(archiveItems.map((item) => item.year))].sort(
+  (a, b) => Number(b) - Number(a)
+);
+const allTags = [...new Set(archiveItems.flatMap((item) => item.tags))].sort((a, b) =>
+  a.localeCompare(b, "zh-Hans-CN")
+);
+const totalTags = allTags.length;
+
+const minDate = archiveItems.length
+  ? archiveItems.reduce((min, item) => (item.dateKey < min ? item.dateKey : min), archiveItems[0].dateKey)
+  : undefined;
+const maxDate = archiveItems.length
+  ? archiveItems.reduce((max, item) => (item.dateKey > max ? item.dateKey : max), archiveItems[0].dateKey)
+  : undefined;
+
+const fallbackGroups = archiveYears.map((year) => ({
+  key: year,
+  label: `${year} 年`,
+  items: archiveItems.filter((item) => item.year === year).sort((a, b) => b.timestamp - a.timestamp)
+}));
+---
+
+<BaseLayout title="归档">
+  <section class="stack archive-page" data-reveal>
+    <div class="archive-head">
+      <div>
+        <p class="section-kicker">Archive Lab</p>
+        <h1 class="page-title">归档</h1>
+      </div>
+      <p class="muted">
+        支持按年、月、日、日期区间、标签与关键词的组合筛选。当前共有 {archiveItems.length} 篇文章，{totalTags} 个标签。
+      </p>
+    </div>
+
+    {archiveItems.length > 0 ? (
+      <>
+        <section class="surface filter-panel" data-archive-filter>
+          <div class="filter-grid">
+            <label class="field">
+              <span>分组方式</span>
+              <select data-archive-granularity>
+                <option value="year">按年</option>
+                <option value="month">按月</option>
+                <option value="day">按天</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>年份</span>
+              <select data-archive-year>
+                <option value="all">全部年份</option>
+                {archiveYears.map((year) => (
+                  <option value={year}>{year} 年</option>
+                ))}
+              </select>
+            </label>
+
+            <label class="field">
+              <span>月份</span>
+              <select data-archive-month>
+                <option value="all">全部月份</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>日期</span>
+              <select data-archive-day>
+                <option value="all">全部日期</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>排序</span>
+              <select data-archive-sort>
+                <option value="desc">最新优先</option>
+                <option value="asc">最早优先</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>标签模式</span>
+              <select data-archive-tag-mode>
+                <option value="or">匹配任一标签 (OR)</option>
+                <option value="and">必须包含全部标签 (AND)</option>
+              </select>
+            </label>
+
+            <label class="field field-wide">
+              <span>关键词</span>
+              <input
+                type="search"
+                placeholder="搜索标题、摘要或标签"
+                inputmode="search"
+                autocomplete="off"
+                data-archive-query
+              />
+            </label>
+          </div>
+
+          <div class="range-grid">
+            <label class="field">
+              <span>起始日期</span>
+              <input type="date" min={minDate} max={maxDate} data-archive-start-date />
+            </label>
+
+            <label class="field">
+              <span>结束日期</span>
+              <input type="date" min={minDate} max={maxDate} data-archive-end-date />
+            </label>
+          </div>
+
+          <div class="tag-advanced">
+            <div class="tag-advanced-head">
+              <p class="tag-title">多标签筛选</p>
+              <button class="tag-clear-btn" type="button" data-archive-clear-tags>清空标签</button>
+            </div>
+            <div class="tag-chip-list" data-archive-tag-chips>
+              {allTags.map((tag) => (
+                <button type="button" class="tag-chip" data-archive-tag-button={tag} aria-pressed="false">
+                  #{tag}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div class="filter-actions">
+            <label class="check-field">
+              <input type="checkbox" data-archive-updated />
+              <span>仅看有更新记录</span>
+            </label>
+            <p class="muted result-summary" data-archive-summary>
+              显示 {archiveItems.length} / {archiveItems.length} 篇，按年分组。
+            </p>
+            <button class="reset-btn" type="button" data-archive-reset>
+              重置全部筛选
+            </button>
+          </div>
+        </section>
+
+        <div class="stack archive-results" data-archive-output>
+          {fallbackGroups.map((group) => (
+            <section class="surface archive-group">
+              <h2 class="archive-heading">
+                <span class="archive-dot"></span>
+                {group.label}
+              </h2>
+              <ul class="archive-list">
+                {group.items.map((item) => (
+                  <li class="archive-item">
+                    <div class="archive-item-main">
+                      <a href={item.href}>{item.title}</a>
+                      {item.description && <p class="archive-desc muted">{item.description}</p>}
+                      {item.tags.length > 0 && (
+                        <div class="archive-tags">
+                          {item.tags.map((tag) => (
+                            <a class="archive-tag" href={`/tags/${tagToUrlSegment(tag)}/`}>
+                              #{tag}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div class="archive-meta">
+                      <time datetime={item.dateISO}>{item.dateLabel}</time>
+                      {item.updatedDateLabel && <span class="updated-note">更新于 {item.updatedDateLabel}</span>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+
+        <script
+          type="application/json"
+          id="archive-data"
+          set:html={JSON.stringify({ items: archiveItems, allTags })}
+        ></script>
+        <script is:inline>
+          (() => {
+            const dataNode = document.getElementById("archive-data");
+            const output = document.querySelector("[data-archive-output]");
+
+            if (!(dataNode instanceof HTMLScriptElement) || !(output instanceof HTMLElement)) {
+              return;
+            }
+
+            let payload = null;
+            try {
+              payload = JSON.parse(dataNode.textContent || "{}");
+            } catch {
+              return;
+            }
+
+            const allItems = Array.isArray(payload?.items) ? payload.items : [];
+            const allTags = Array.isArray(payload?.allTags) ? payload.allTags : [];
+            if (!Array.isArray(allItems) || allItems.length === 0) {
+              return;
+            }
+
+            const granularitySelect = document.querySelector("[data-archive-granularity]");
+            const yearSelect = document.querySelector("[data-archive-year]");
+            const monthSelect = document.querySelector("[data-archive-month]");
+            const daySelect = document.querySelector("[data-archive-day]");
+            const sortSelect = document.querySelector("[data-archive-sort]");
+            const tagModeSelect = document.querySelector("[data-archive-tag-mode]");
+            const queryInput = document.querySelector("[data-archive-query]");
+            const startDateInput = document.querySelector("[data-archive-start-date]");
+            const endDateInput = document.querySelector("[data-archive-end-date]");
+            const updatedCheckbox = document.querySelector("[data-archive-updated]");
+            const clearTagsButton = document.querySelector("[data-archive-clear-tags]");
+            const resetButton = document.querySelector("[data-archive-reset]");
+            const summary = document.querySelector("[data-archive-summary]");
+            const tagButtons = [...document.querySelectorAll("[data-archive-tag-button]")];
+
+            if (
+              !(granularitySelect instanceof HTMLSelectElement) ||
+              !(yearSelect instanceof HTMLSelectElement) ||
+              !(monthSelect instanceof HTMLSelectElement) ||
+              !(daySelect instanceof HTMLSelectElement) ||
+              !(sortSelect instanceof HTMLSelectElement) ||
+              !(tagModeSelect instanceof HTMLSelectElement) ||
+              !(queryInput instanceof HTMLInputElement) ||
+              !(startDateInput instanceof HTMLInputElement) ||
+              !(endDateInput instanceof HTMLInputElement) ||
+              !(updatedCheckbox instanceof HTMLInputElement) ||
+              !(clearTagsButton instanceof HTMLButtonElement) ||
+              !(resetButton instanceof HTMLButtonElement) ||
+              !(summary instanceof HTMLElement)
+            ) {
+              return;
+            }
+
+            const defaultState = {
+              granularity: "year",
+              year: "all",
+              month: "all",
+              day: "all",
+              sort: "desc",
+              query: "",
+              updatedOnly: false,
+              startDate: "",
+              endDate: "",
+              tagMode: "or"
+            };
+
+            const state = {
+              ...defaultState,
+              selectedTags: new Set()
+            };
+
+            const granularityLabelMap = {
+              year: "年",
+              month: "月",
+              day: "日"
+            };
+
+            const compareDesc = (left, right) => (left === right ? 0 : left > right ? -1 : 1);
+            const unique = (values) => [...new Set(values)];
+            const normalizeKeyword = (value) => value.trim().toLowerCase();
+
+            const setSelectOptions = (select, stateKey, options, allLabel) => {
+              while (select.firstChild) {
+                select.removeChild(select.firstChild);
+              }
+
+              select.append(new Option(allLabel, "all"));
+              for (const option of options) {
+                select.append(new Option(option.label, option.value));
+              }
+
+              const current = state[stateKey];
+              const exists = current !== "all" && options.some((option) => option.value === current);
+              state[stateKey] = exists ? current : "all";
+              select.value = state[stateKey];
+            };
+
+            const formatMonthLabel = (value) => {
+              const [year, month] = value.split("-");
+              return `${year} 年 ${month} 月`;
+            };
+
+            const formatDayLabel = (value) => {
+              const [year, month, day] = value.split("-");
+              return `${year} 年 ${month} 月 ${day} 日`;
+            };
+
+            const syncDateSelectCollections = () => {
+              const years = unique(allItems.map((item) => item.year)).sort((a, b) => Number(b) - Number(a));
+              setSelectOptions(
+                yearSelect,
+                "year",
+                years.map((year) => ({ value: year, label: `${year} 年` })),
+                "全部年份"
+              );
+
+              const yearItems = allItems.filter((item) => state.year === "all" || item.year === state.year);
+              const months = unique(yearItems.map((item) => item.monthKey)).sort(compareDesc);
+              setSelectOptions(
+                monthSelect,
+                "month",
+                months.map((value) => ({ value, label: formatMonthLabel(value) })),
+                "全部月份"
+              );
+
+              const monthItems = yearItems.filter(
+                (item) => state.month === "all" || item.monthKey === state.month
+              );
+              const days = unique(monthItems.map((item) => item.dayKey)).sort(compareDesc);
+              setSelectOptions(
+                daySelect,
+                "day",
+                days.map((value) => ({ value, label: formatDayLabel(value) })),
+                "全部日期"
+              );
+            };
+
+            const syncTagButtons = () => {
+              for (const button of tagButtons) {
+                if (!(button instanceof HTMLButtonElement)) {
+                  continue;
+                }
+                const tag = button.dataset.archiveTagButton;
+                if (!tag) {
+                  continue;
+                }
+                const isActive = state.selectedTags.has(tag);
+                button.setAttribute("aria-pressed", String(isActive));
+                button.classList.toggle("is-active", isActive);
+              }
+            };
+
+            const matchDateFilter = (item) => {
+              if (state.year !== "all" && item.year !== state.year) {
+                return false;
+              }
+              if (state.month !== "all" && item.monthKey !== state.month) {
+                return false;
+              }
+              if (state.day !== "all" && item.dayKey !== state.day) {
+                return false;
+              }
+              if (state.startDate && item.dateKey < state.startDate) {
+                return false;
+              }
+              if (state.endDate && item.dateKey > state.endDate) {
+                return false;
+              }
+              return true;
+            };
+
+            const matchTagFilter = (item) => {
+              if (state.selectedTags.size === 0) {
+                return true;
+              }
+              if (state.tagMode === "and") {
+                for (const tag of state.selectedTags) {
+                  if (!item.tags.includes(tag)) {
+                    return false;
+                  }
+                }
+                return true;
+              }
+              for (const tag of state.selectedTags) {
+                if (item.tags.includes(tag)) {
+                  return true;
+                }
+              }
+              return false;
+            };
+
+            const matchKeyword = (item, keyword) => {
+              if (!keyword) {
+                return true;
+              }
+              if (item.title.toLowerCase().includes(keyword)) {
+                return true;
+              }
+              if ((item.description || "").toLowerCase().includes(keyword)) {
+                return true;
+              }
+              return item.tags.some((tag) => tag.includes(keyword));
+            };
+
+            const getFilteredItems = () =>
+              allItems
+                .filter(matchDateFilter)
+                .filter((item) => (state.updatedOnly ? Boolean(item.updatedDateISO) : true))
+                .filter(matchTagFilter)
+                .filter((item) => matchKeyword(item, normalizeKeyword(state.query)))
+                .sort((a, b) => (state.sort === "desc" ? b.timestamp - a.timestamp : a.timestamp - b.timestamp));
+
+            const getGroupKey = (item) => {
+              if (state.granularity === "month") {
+                return item.monthKey;
+              }
+              if (state.granularity === "day") {
+                return item.dayKey;
+              }
+              return item.year;
+            };
+
+            const getGroupLabel = (key) => {
+              if (state.granularity === "month") {
+                return formatMonthLabel(key);
+              }
+              if (state.granularity === "day") {
+                return formatDayLabel(key);
+              }
+              return `${key} 年`;
+            };
+
+            const groupItems = (items) => {
+              const map = new Map();
+
+              for (const item of items) {
+                const key = getGroupKey(item);
+                const group = map.get(key) ?? [];
+                group.push(item);
+                map.set(key, group);
+              }
+
+              const direction = state.sort === "desc" ? -1 : 1;
+              return [...map.entries()]
+                .map(([key, groupedItems]) => ({ key, label: getGroupLabel(key), items: groupedItems }))
+                .sort((left, right) => (left.key === right.key ? 0 : (left.key > right.key ? 1 : -1) * direction));
+            };
+
+            const createGroupNode = (group) => {
+              const groupNode = document.createElement("section");
+              groupNode.className = "surface archive-group";
+
+              const heading = document.createElement("h2");
+              heading.className = "archive-heading";
+              const dot = document.createElement("span");
+              dot.className = "archive-dot";
+              heading.append(dot, group.label);
+
+              const list = document.createElement("ul");
+              list.className = "archive-list";
+
+              for (const item of group.items) {
+                const listItem = document.createElement("li");
+                listItem.className = "archive-item";
+
+                const main = document.createElement("div");
+                main.className = "archive-item-main";
+                const title = document.createElement("a");
+                title.href = item.href;
+                title.textContent = item.title;
+                main.append(title);
+
+                if (item.description) {
+                  const description = document.createElement("p");
+                  description.className = "archive-desc muted";
+                  description.textContent = item.description;
+                  main.append(description);
+                }
+
+                if (item.tags.length > 0) {
+                  const tagWrap = document.createElement("div");
+                  tagWrap.className = "archive-tags";
+                  for (const tag of item.tags) {
+                    const tagNode = document.createElement("a");
+                    tagNode.className = "archive-tag";
+                    tagNode.href = `/tags/${encodeURIComponent(tag)}/`;
+                    tagNode.textContent = `#${tag}`;
+                    tagWrap.append(tagNode);
+                  }
+                  main.append(tagWrap);
+                }
+
+                const meta = document.createElement("div");
+                meta.className = "archive-meta";
+                const pubDate = document.createElement("time");
+                pubDate.dateTime = item.dateISO;
+                pubDate.textContent = item.dateLabel;
+                meta.append(pubDate);
+
+                if (item.updatedDateISO && item.updatedDateLabel) {
+                  const updated = document.createElement("span");
+                  updated.className = "updated-note";
+                  updated.textContent = `更新于 ${item.updatedDateLabel}`;
+                  meta.append(updated);
+                }
+
+                listItem.append(main, meta);
+                list.append(listItem);
+              }
+
+              groupNode.append(heading, list);
+              return groupNode;
+            };
+
+            const updateSummary = (filteredCount, groupCount) => {
+              const tagArray = [...state.selectedTags];
+              const tagInfo =
+                tagArray.length > 0
+                  ? `；标签(${state.tagMode.toUpperCase()}): ${tagArray.map((tag) => `#${tag}`).join(", ")}`
+                  : "";
+              const rangeInfo =
+                state.startDate || state.endDate
+                  ? `；范围: ${state.startDate || "..."} ~ ${state.endDate || "..."}`
+                  : "";
+              summary.textContent = `显示 ${filteredCount} / ${allItems.length} 篇，按${
+                granularityLabelMap[state.granularity]
+              }分组共 ${groupCount} 组${tagInfo}${rangeInfo}。`;
+            };
+
+            const render = () => {
+              syncDateSelectCollections();
+              syncTagButtons();
+
+              const filtered = getFilteredItems();
+              const groups = groupItems(filtered);
+              output.replaceChildren();
+
+              if (groups.length === 0) {
+                const empty = document.createElement("p");
+                empty.className = "surface empty muted";
+                empty.textContent = "没有匹配结果，试试放宽筛选条件。";
+                output.append(empty);
+              } else {
+                for (const group of groups) {
+                  output.append(createGroupNode(group));
+                }
+              }
+
+              updateSummary(filtered.length, groups.length);
+            };
+
+            const normalizeDateRange = () => {
+              if (state.startDate && state.endDate && state.startDate > state.endDate) {
+                state.endDate = state.startDate;
+                endDateInput.value = state.endDate;
+              }
+            };
+
+            const bindControls = () => {
+              granularitySelect.addEventListener("change", () => {
+                state.granularity = granularitySelect.value;
+                render();
+              });
+
+              yearSelect.addEventListener("change", () => {
+                state.year = yearSelect.value;
+                state.month = "all";
+                state.day = "all";
+                render();
+              });
+
+              monthSelect.addEventListener("change", () => {
+                state.month = monthSelect.value;
+                state.day = "all";
+                render();
+              });
+
+              daySelect.addEventListener("change", () => {
+                state.day = daySelect.value;
+                render();
+              });
+
+              sortSelect.addEventListener("change", () => {
+                state.sort = sortSelect.value;
+                render();
+              });
+
+              tagModeSelect.addEventListener("change", () => {
+                state.tagMode = tagModeSelect.value;
+                render();
+              });
+
+              queryInput.addEventListener("input", () => {
+                state.query = queryInput.value;
+                render();
+              });
+
+              startDateInput.addEventListener("change", () => {
+                state.startDate = startDateInput.value;
+                normalizeDateRange();
+                render();
+              });
+
+              endDateInput.addEventListener("change", () => {
+                state.endDate = endDateInput.value;
+                if (state.startDate && state.endDate && state.startDate > state.endDate) {
+                  state.startDate = state.endDate;
+                  startDateInput.value = state.startDate;
+                }
+                render();
+              });
+
+              updatedCheckbox.addEventListener("change", () => {
+                state.updatedOnly = updatedCheckbox.checked;
+                render();
+              });
+
+              for (const button of tagButtons) {
+                if (!(button instanceof HTMLButtonElement)) {
+                  continue;
+                }
+                const tag = button.dataset.archiveTagButton;
+                if (!tag) {
+                  continue;
+                }
+                button.addEventListener("click", () => {
+                  if (state.selectedTags.has(tag)) {
+                    state.selectedTags.delete(tag);
+                  } else {
+                    state.selectedTags.add(tag);
+                  }
+                  render();
+                });
+              }
+
+              clearTagsButton.addEventListener("click", () => {
+                state.selectedTags.clear();
+                render();
+              });
+
+              resetButton.addEventListener("click", () => {
+                state.granularity = defaultState.granularity;
+                state.year = defaultState.year;
+                state.month = defaultState.month;
+                state.day = defaultState.day;
+                state.sort = defaultState.sort;
+                state.query = defaultState.query;
+                state.updatedOnly = defaultState.updatedOnly;
+                state.startDate = defaultState.startDate;
+                state.endDate = defaultState.endDate;
+                state.tagMode = defaultState.tagMode;
+                state.selectedTags.clear();
+
+                granularitySelect.value = state.granularity;
+                sortSelect.value = state.sort;
+                tagModeSelect.value = state.tagMode;
+                queryInput.value = state.query;
+                updatedCheckbox.checked = state.updatedOnly;
+                startDateInput.value = state.startDate;
+                endDateInput.value = state.endDate;
+                render();
+              });
+            };
+
+            granularitySelect.value = state.granularity;
+            sortSelect.value = state.sort;
+            tagModeSelect.value = state.tagMode;
+            queryInput.value = state.query;
+            updatedCheckbox.checked = state.updatedOnly;
+            startDateInput.value = state.startDate;
+            endDateInput.value = state.endDate;
+
+            bindControls();
+            render();
+          })();
+        </script>
+      </>
+    ) : (
+      <p class="surface empty muted">暂无文章。</p>
+    )}
+  </section>
+</BaseLayout>
+
+<style>
+  .archive-page {
+    gap: 1.2rem;
+  }
+
+  .archive-head {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .filter-panel {
+    padding: 1rem;
+    border-radius: var(--radius-lg);
+    border-color: rgba(218, 205, 184, 0.9);
+    display: grid;
+    gap: 1rem;
+  }
+
+  .filter-grid {
+    display: grid;
+    gap: 0.72rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .range-grid {
+    display: grid;
+    gap: 0.72rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field {
+    display: grid;
+    gap: 0.34rem;
+  }
+
+  .field span {
+    color: var(--text-soft);
+    font-size: 0.74rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .field-wide {
+    grid-column: span 2;
+  }
+
+  .field select,
+  .field input {
+    width: 100%;
+    min-height: 2.32rem;
+    border-radius: 11px;
+    border: 1px solid rgba(218, 205, 184, 0.95);
+    background: rgba(255, 255, 255, 0.74);
+    color: var(--text);
+    font: inherit;
+    padding: 0.36rem 0.62rem;
+  }
+
+  .field select {
+    cursor: pointer;
+  }
+
+  .field input::placeholder {
+    color: var(--text-soft);
+  }
+
+  .field select:focus-visible,
+  .field input:focus-visible {
+    border-color: rgba(31, 120, 117, 0.5);
+  }
+
+  .tag-advanced {
+    border: 1px dashed rgba(218, 205, 184, 0.96);
+    border-radius: 14px;
+    padding: 0.8rem;
+    display: grid;
+    gap: 0.7rem;
+    background: rgba(255, 255, 255, 0.36);
+  }
+
+  .tag-advanced-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .tag-title {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: 0.88rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .tag-clear-btn {
+    border: 1px solid rgba(31, 120, 117, 0.3);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+    border-radius: 999px;
+    min-height: 1.95rem;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .tag-clear-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(31, 120, 117, 0.46);
+    background: rgba(31, 120, 117, 0.14);
+  }
+
+  .tag-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .tag-chip {
+    border: 1px solid rgba(31, 120, 117, 0.24);
+    background: rgba(31, 120, 117, 0.06);
+    color: var(--accent-cyan);
+    border-radius: 999px;
+    min-height: 1.9rem;
+    padding: 0.12rem 0.62rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out),
+      color 220ms var(--ease-out);
+  }
+
+  .tag-chip:hover {
+    transform: translateY(-1px);
+    border-color: rgba(31, 120, 117, 0.44);
+    background: rgba(31, 120, 117, 0.12);
+  }
+
+  .tag-chip.is-active,
+  .tag-chip[aria-pressed="true"] {
+    border-color: rgba(159, 57, 34, 0.44);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.24), rgba(196, 82, 55, 0.12));
+    color: var(--accent-strong);
+  }
+
+  .filter-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+  }
+
+  .check-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    color: var(--text-soft);
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .check-field input {
+    accent-color: var(--accent-cyan);
+  }
+
+  .result-summary {
+    margin: 0;
+    font-size: 0.9rem;
+  }
+
+  .reset-btn {
+    border-radius: 999px;
+    border: 1px solid rgba(159, 57, 34, 0.32);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.16), rgba(196, 82, 55, 0.06));
+    color: var(--accent-strong);
+    min-height: 2.2rem;
+    padding: 0.28rem 0.84rem;
+    font-size: 0.84rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .reset-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(159, 57, 34, 0.46);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.24), rgba(196, 82, 55, 0.12));
+  }
+
+  :global([data-archive-output]) {
+    gap: 1rem;
+  }
+
+  :global([data-archive-output] .archive-group) {
+    padding: 1rem 1.05rem;
+    border-radius: 18px;
+    border-color: rgba(218, 205, 184, 0.9);
+  }
+
+  :global([data-archive-output] .archive-heading) {
+    margin: 0 0 0.82rem;
+    font-size: 1.14rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  }
+
+  :global([data-archive-output] .archive-dot) {
+    width: 0.52rem;
+    height: 0.52rem;
+    border-radius: 50%;
+    background: linear-gradient(120deg, var(--accent), var(--accent-cyan));
+    box-shadow: 0 0 0 4px rgba(196, 82, 55, 0.12);
+  }
+
+  :global([data-archive-output] .archive-list) {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.68rem;
+  }
+
+  :global([data-archive-output] .archive-item) {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px dashed rgba(218, 205, 184, 0.96);
+    padding-bottom: 0.6rem;
+  }
+
+  :global([data-archive-output] .archive-item:last-child) {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  :global([data-archive-output] .archive-item-main) {
+    display: grid;
+    gap: 0.34rem;
+    min-width: 0;
+  }
+
+  :global([data-archive-output] .archive-item-main > a) {
+    color: var(--text);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  :global([data-archive-output] .archive-item-main > a:hover) {
+    color: var(--accent);
+  }
+
+  :global([data-archive-output] .archive-desc) {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.48;
+  }
+
+  :global([data-archive-output] .archive-tags) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+  }
+
+  :global([data-archive-output] .archive-tag) {
+    border-radius: 999px;
+    border: 1px solid rgba(31, 120, 117, 0.26);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+    font-size: 0.74rem;
+    padding: 0.14rem 0.5rem;
+    line-height: 1.2;
+  }
+
+  :global([data-archive-output] .archive-tag:hover) {
+    border-color: rgba(31, 120, 117, 0.46);
+    background: rgba(31, 120, 117, 0.14);
+    color: var(--accent-cyan);
+  }
+
+  :global([data-archive-output] .archive-meta) {
+    display: grid;
+    justify-items: end;
+    align-content: start;
+    gap: 0.2rem;
+    min-width: 8.6rem;
+    color: var(--text-soft);
+    font-size: 0.84rem;
+    white-space: nowrap;
+  }
+
+  :global([data-archive-output] .updated-note) {
+    font-size: 0.76rem;
+  }
+
+  .empty {
+    padding: 1rem;
+  }
+
+  @media (max-width: 1100px) {
+    .filter-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .field-wide {
+      grid-column: span 3;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .filter-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .field-wide {
+      grid-column: span 2;
+    }
+
+    .range-grid {
+      grid-template-columns: 1fr;
+    }
+
+    :global([data-archive-output] .archive-item) {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    :global([data-archive-output] .archive-meta) {
+      justify-items: start;
+      min-width: auto;
+      white-space: normal;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .filter-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .field-wide {
+      grid-column: span 1;
+    }
+  }
+
+  :global(html[data-theme="dark"]) .filter-panel {
+    border-color: rgba(45, 59, 75, 0.95);
+  }
+
+  :global(html[data-theme="dark"]) .field select,
+  :global(html[data-theme="dark"]) .field input {
+    border-color: rgba(45, 59, 75, 0.95);
+    background: rgba(16, 24, 34, 0.84);
+    color: var(--text);
+  }
+
+  :global(html[data-theme="dark"]) .field select:focus-visible,
+  :global(html[data-theme="dark"]) .field input:focus-visible {
+    border-color: rgba(86, 198, 194, 0.56);
+  }
+
+  :global(html[data-theme="dark"]) .tag-advanced {
+    border-color: rgba(45, 59, 75, 0.95);
+    background: rgba(16, 24, 34, 0.62);
+  }
+
+  :global(html[data-theme="dark"]) .tag-clear-btn {
+    border-color: rgba(86, 198, 194, 0.42);
+    background: rgba(86, 198, 194, 0.14);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .tag-clear-btn:hover {
+    border-color: rgba(86, 198, 194, 0.54);
+    background: rgba(86, 198, 194, 0.22);
+  }
+
+  :global(html[data-theme="dark"]) .tag-chip {
+    border-color: rgba(86, 198, 194, 0.32);
+    background: rgba(86, 198, 194, 0.08);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .tag-chip:hover {
+    border-color: rgba(86, 198, 194, 0.48);
+    background: rgba(86, 198, 194, 0.16);
+  }
+
+  :global(html[data-theme="dark"]) .tag-chip.is-active,
+  :global(html[data-theme="dark"]) .tag-chip[aria-pressed="true"] {
+    border-color: rgba(241, 141, 85, 0.56);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.28), rgba(241, 141, 85, 0.14));
+    color: var(--accent-strong);
+  }
+
+  :global(html[data-theme="dark"]) .reset-btn {
+    border-color: rgba(241, 141, 85, 0.44);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.24), rgba(241, 141, 85, 0.1));
+  }
+
+  :global(html[data-theme="dark"]) .reset-btn:hover {
+    border-color: rgba(241, 141, 85, 0.58);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.3), rgba(241, 141, 85, 0.16));
+  }
+
+  :global(html[data-theme="dark"] [data-archive-output] .archive-group) {
+    border-color: rgba(45, 59, 75, 0.95);
+  }
+
+  :global(html[data-theme="dark"] [data-archive-output] .archive-dot) {
+    box-shadow: 0 0 0 4px rgba(241, 141, 85, 0.2);
+  }
+
+  :global(html[data-theme="dark"] [data-archive-output] .archive-item) {
+    border-bottom-color: rgba(45, 59, 75, 0.95);
+  }
+
+  :global(html[data-theme="dark"] [data-archive-output] .archive-tag) {
+    border-color: rgba(86, 198, 194, 0.34);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"] [data-archive-output] .archive-tag:hover) {
+    border-color: rgba(86, 198, 194, 0.52);
+    background: rgba(86, 198, 194, 0.2);
+    color: var(--accent-cyan-soft);
+  }
+</style>

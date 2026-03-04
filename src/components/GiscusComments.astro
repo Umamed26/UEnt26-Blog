@@ -1,0 +1,81 @@
+---
+const repo = import.meta.env.PUBLIC_GISCUS_REPO;
+const repoId = import.meta.env.PUBLIC_GISCUS_REPO_ID;
+const category = import.meta.env.PUBLIC_GISCUS_CATEGORY;
+const categoryId = import.meta.env.PUBLIC_GISCUS_CATEGORY_ID;
+
+const enabled = Boolean(repo && repoId && category && categoryId);
+---
+
+<section class="surface comments" aria-label="评论区">
+  <h2>评论</h2>
+
+  {
+    enabled ? (
+      <>
+        <div
+          id="giscus-root"
+          data-repo={repo}
+          data-repo-id={repoId}
+          data-category={category}
+          data-category-id={categoryId}
+          data-mapping="pathname"
+          data-strict="0"
+          data-reactions-enabled="1"
+          data-emit-metadata="0"
+          data-input-position="top"
+          data-lang="zh-CN"
+          data-theme="dark_dimmed"
+          data-loading="lazy"
+        ></div>
+        <p id="giscus-fallback" class="fallback" hidden>评论加载失败，请稍后重试。</p>
+        <script is:inline>
+          const root = document.getElementById("giscus-root");
+          const fallback = document.getElementById("giscus-fallback");
+
+          if (root) {
+            const script = document.createElement("script");
+            script.src = "https://giscus.app/client.js";
+            script.async = true;
+            script.crossOrigin = "anonymous";
+
+            for (const attribute of root.attributes) {
+              if (attribute.name.startsWith("data-")) {
+                script.setAttribute(attribute.name, attribute.value);
+              }
+            }
+
+            script.onerror = () => {
+              if (fallback) {
+                fallback.hidden = false;
+              }
+            };
+
+            root.appendChild(script);
+          }
+        </script>
+      </>
+    ) : (
+      <p class="fallback">评论功能未配置。请在环境变量中配置 Giscus 参数。</p>
+    )
+  }
+</section>
+
+<style>
+  .comments {
+    margin-top: 2rem;
+    padding: 1rem;
+  }
+
+  h2 {
+    margin-top: 0;
+    margin-bottom: 0.9rem;
+    font-size: 1.1rem;
+  }
+
+  .fallback {
+    color: var(--text-soft);
+    margin: 0.4rem 0 0;
+    font-size: 0.9rem;
+  }
+</style>

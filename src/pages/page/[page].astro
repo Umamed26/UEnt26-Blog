@@ -1,0 +1,66 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import PostCard from "@/components/PostCard.astro";
+import Pagination from "@/components/Pagination.astro";
+import { siteConfig } from "@/config/site";
+import { getAllPublishedPosts, splitFeaturedAndFeedPosts } from "@/utils/posts";
+import type { PostEntry } from "@/utils/posts";
+
+type Props = {
+  posts: PostEntry[];
+  currentPage: number;
+  totalPages: number;
+};
+
+export async function getStaticPaths() {
+  const posts = await getAllPublishedPosts();
+  const { feed } = splitFeaturedAndFeedPosts(posts, siteConfig.featuredCount);
+  const totalPages = Math.ceil(feed.length / siteConfig.postsPerPage);
+
+  return Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) => {
+    const currentPage = index + 2;
+    const start = (currentPage - 1) * siteConfig.postsPerPage;
+    const end = start + siteConfig.postsPerPage;
+
+    return {
+      params: { page: String(currentPage) },
+      props: {
+        posts: feed.slice(start, end),
+        currentPage,
+        totalPages
+      }
+    };
+  });
+}
+
+const { posts, currentPage, totalPages } = Astro.props as Props;
+---
+
+<BaseLayout title={`第 ${currentPage} 页`}>
+  <section class="stack listing-page" data-reveal>
+    <div>
+      <p class="section-kicker">Feed</p>
+      <h1 class="page-title">文章列表</h1>
+    </div>
+    <p class="muted">第 {currentPage} / {totalPages} 页</p>
+
+    <div class="post-grid">
+      {posts.map((post) => (
+        <PostCard post={post} />
+      ))}
+    </div>
+
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      baseUrl="/page"
+      firstPageUrl="/"
+    />
+  </section>
+</BaseLayout>
+
+<style>
+  .listing-page {
+    gap: 1.1rem;
+  }
+</style>

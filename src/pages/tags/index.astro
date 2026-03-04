@@ -1,0 +1,43 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import TagPill from "@/components/TagPill.astro";
+import { getAllPublishedPosts, getTagsWithCount, tagToUrlSegment } from "@/utils/posts";
+
+const posts = await getAllPublishedPosts();
+const tags = getTagsWithCount(posts);
+---
+
+<BaseLayout title="标签">
+  <section class="stack tags-page" data-reveal>
+    <div>
+      <p class="section-kicker">Taxonomy</p>
+      <h1 class="page-title">标签</h1>
+    </div>
+    <p class="muted">共 {tags.length} 个标签</p>
+    {tags.length > 0 ? (
+      <div class="tag-list">
+        {tags.map((item) => (
+          <TagPill tag={item.tag} count={item.count} href={`/tags/${tagToUrlSegment(item.tag)}/`} />
+        ))}
+      </div>
+    ) : (
+      <p class="surface empty muted">暂无标签。发布带 <code>tags</code> frontmatter 的文章后会自动出现。</p>
+    )}
+  </section>
+</BaseLayout>
+
+<style>
+  .tags-page {
+    gap: 1rem;
+  }
+
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+
+  .empty {
+    padding: 1rem;
+  }
+</style>

@@ -1,0 +1,162 @@
+---
+import { render } from "astro:content";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import CodeBlockWrapper from "@/components/CodeBlockWrapper.astro";
+import GiscusComments from "@/components/GiscusComments.astro";
+import TagPill from "@/components/TagPill.astro";
+import TOC from "@/components/TOC.astro";
+import { getAllPublishedPosts, getPostTags, tagToUrlSegment, type PostEntry } from "@/utils/posts";
+
+type Props = {
+  post: PostEntry;
+};
+
+export async function getStaticPaths() {
+  const posts = await getAllPublishedPosts();
+  return posts.map((post) => ({
+    params: { slug: post.slug },
+    props: { post }
+  }));
+}
+
+const { post } = Astro.props as Props;
+const { Content, headings } = await render(post);
+const toc = post.data.toc ? headings.filter((item) => item.depth >= 2 && item.depth <= 3) : [];
+const tags = getPostTags(post);
+const canonicalPath = `/posts/${post.slug}/`;
+const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.data.cover?.src;
+---
+
+<BaseLayout
+  title={post.data.title}
+  description={post.data.description}
+  canonicalPath={canonicalPath}
+  image={coverSrc}
+>
+  <article class="stack post-shell" data-reading-root>
+    <header class="surface post-header" data-reveal>
+      <p class="section-kicker">Article</p>
+      <h1 class="page-title">{post.data.title}</h1>
+      <p class="muted summary">{post.data.description}</p>
+    </header>
+
+    <section class="surface meta-band" data-reveal style="--reveal-delay: 80ms;">
+      <div class="meta-row">
+        <span class="meta-label">发布</span>
+        <time datetime={post.data.pubDate.toISOString()}>
+          {post.data.pubDate.toLocaleDateString("zh-CN")}
+        </time>
+      </div>
+      {post.data.updatedDate && (
+        <div class="meta-row">
+          <span class="meta-label">更新</span>
+          <time datetime={post.data.updatedDate.toISOString()}>
+            {post.data.updatedDate.toLocaleDateString("zh-CN")}
+          </time>
+        </div>
+      )}
+      {typeof post.data.pinned === "number" && (
+        <div class="meta-row">
+          <span class="meta-label">置顶权重</span>
+          <span>#{post.data.pinned}</span>
+        </div>
+      )}
+      {tags.length > 0 && (
+        <div class="meta-tags">
+          {tags.map((tag) => (
+            <TagPill tag={tag} href={`/tags/${tagToUrlSegment(tag)}/`} />
+          ))}
+        </div>
+      )}
+    </section>
+
+    <div class="article-layout" data-reveal style="--reveal-delay: 120ms;">
+      <CodeBlockWrapper>
+        <Content />
+      </CodeBlockWrapper>
+      <div class="toc-wrap">
+        <TOC headings={toc} />
+      </div>
+    </div>
+
+    <div data-reveal style="--reveal-delay: 160ms;">
+      <GiscusComments />
+    </div>
+  </article>
+</BaseLayout>
+
+<style>
+  .post-shell {
+    gap: 1.35rem;
+  }
+
+  .post-header {
+    padding: clamp(1.1rem, 2.2vw, 1.55rem);
+    border-radius: var(--radius-lg);
+  }
+
+  .summary {
+    margin: 0;
+    max-width: 64ch;
+  }
+
+  .meta-band {
+    display: grid;
+    gap: 0.7rem;
+    padding: 1rem;
+    border-radius: 16px;
+    border-color: rgba(218, 205, 184, 0.9);
+  }
+
+  .meta-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.86rem;
+    color: var(--text-soft);
+  }
+
+  .meta-label {
+    border: 1px solid rgba(31, 120, 117, 0.3);
+    border-radius: 999px;
+    padding: 0.1rem 0.48rem;
+    color: var(--accent-cyan);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .meta-tags {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    margin-top: 0.1rem;
+  }
+
+  .article-layout {
+    display: grid;
+    gap: 1.2rem;
+    align-items: start;
+  }
+
+  @media (min-width: 1120px) {
+    .article-layout {
+      grid-template-columns: minmax(0, 1fr) 270px;
+    }
+  }
+
+  @media (max-width: 1119px) {
+    .toc-wrap {
+      display: none;
+    }
+  }
+
+  :global(html[data-theme="dark"]) .meta-band {
+    border-color: rgba(45, 59, 75, 0.95);
+  }
+
+  :global(html[data-theme="dark"]) .meta-label {
+    border-color: rgba(86, 198, 194, 0.4);
+    color: var(--accent-cyan-soft);
+  }
+</style>

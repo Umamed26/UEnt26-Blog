@@ -1,0 +1,81 @@
+---
+type Props = {
+  tag: string;
+  href?: string;
+  count?: number;
+};
+
+const { tag, href, count } = Astro.props as Props;
+---
+
+{href ? (
+  <a class="tag-pill" href={href}>
+    <span>#{tag}</span>
+    {typeof count === "number" && <small>{count}</small>}
+  </a>
+) : (
+  <span class="tag-pill">
+    <span>#{tag}</span>
+    {typeof count === "number" && <small>{count}</small>}
+  </span>
+)}
+
+<style>
+  .tag-pill {
+    position: relative;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+    color: var(--accent-cyan);
+    border: 1px solid rgba(31, 120, 117, 0.24);
+    background: linear-gradient(120deg, rgba(31, 120, 117, 0.1), rgba(31, 120, 117, 0.04));
+    border-radius: 999px;
+    padding: 0.27rem 0.68rem;
+    line-height: 1.2;
+    transition:
+      transform 240ms var(--ease-out),
+      border-color 240ms var(--ease-out),
+      box-shadow 240ms var(--ease-out);
+  }
+
+  .tag-pill::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-110%);
+    background: linear-gradient(120deg, transparent, rgba(31, 120, 117, 0.2), transparent);
+    transition: transform 420ms var(--ease-out);
+    pointer-events: none;
+  }
+
+  a.tag-pill:hover {
+    transform: translateY(-1px);
+    border-color: rgba(31, 120, 117, 0.44);
+    box-shadow: 0 8px 18px rgba(76, 56, 32, 0.14);
+  }
+
+  a.tag-pill:hover::before {
+    transform: translateX(110%);
+  }
+
+  .tag-pill small {
+    color: var(--text-soft);
+  }
+
+  :global(html[data-theme="dark"]) .tag-pill {
+    border-color: rgba(86, 198, 194, 0.3);
+    background: linear-gradient(120deg, rgba(86, 198, 194, 0.16), rgba(86, 198, 194, 0.07));
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .tag-pill::before {
+    background: linear-gradient(120deg, transparent, rgba(86, 198, 194, 0.28), transparent);
+  }
+
+  :global(html[data-theme="dark"]) a.tag-pill:hover {
+    border-color: rgba(86, 198, 194, 0.5);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
+  }
+</style>

@@ -1,0 +1,379 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Pagination from "@/components/Pagination.astro";
+import PostCard from "@/components/PostCard.astro";
+import TagPill from "@/components/TagPill.astro";
+import { siteConfig } from "@/config/site";
+import {
+  getAllPublishedPosts,
+  getTagsWithCount,
+  splitFeaturedAndFeedPosts,
+  tagToUrlSegment
+} from "@/utils/posts";
+
+const allPosts = await getAllPublishedPosts();
+const { featured, feed } = splitFeaturedAndFeedPosts(allPosts, siteConfig.featuredCount);
+const totalPages = Math.max(1, Math.ceil(feed.length / siteConfig.postsPerPage));
+const pagePosts = feed.slice(0, siteConfig.postsPerPage);
+const tagsWithCount = getTagsWithCount(allPosts);
+const hotTags = tagsWithCount.slice(0, 20);
+const latestPost = allPosts[0];
+const latestDate = latestPost ? latestPost.data.updatedDate ?? latestPost.data.pubDate : undefined;
+const heroStats = [
+  { label: "文章总数", value: String(allPosts.length).padStart(2, "0") },
+  { label: "标签数量", value: String(tagsWithCount.length).padStart(2, "0") },
+  { label: "最近更新", value: latestDate ? latestDate.toLocaleDateString("zh-CN") : "暂无" }
+];
+---
+
+<BaseLayout>
+  <section class="surface hero" data-reveal>
+    <div class="hero-main stack">
+      <p class="section-kicker">Independent Frontend Journal</p>
+      <h1 class="page-title">{siteConfig.title}</h1>
+      <p class="muted intro">{siteConfig.description}</p>
+      <div class="hero-links">
+        <a class="hero-primary" href="/archive/">阅读全部文章</a>
+        <a class="hero-secondary" href="/about/">关于作者</a>
+      </div>
+    </div>
+
+    <aside class="hero-panel" aria-label="站点概览">
+      <p class="panel-title">站点概览</p>
+      <dl class="hero-stats">
+        {heroStats.map((item) => (
+          <div class="stat-item">
+            <dt>{item.label}</dt>
+            <dd>{item.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p class="panel-note">聚焦前端工程、性能优化和写作方法，持续更新中。</p>
+    </aside>
+  </section>
+
+  {featured.length > 0 && (
+    <section class="stack section-gap" aria-labelledby="featured-title" data-reveal style="--reveal-delay: 80ms;">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">Featured Dispatches</p>
+          <h2 id="featured-title" class="section-title">精选文章</h2>
+          <p class="muted section-sub">优先推荐近期最值得阅读的内容。</p>
+        </div>
+      </div>
+      <div class="bento-grid">
+        {featured[0] && (
+          <div class="bento-main">
+            <PostCard post={featured[0]} variant="featured-main" />
+          </div>
+        )}
+        {featured.slice(1).map((post) => (
+          <PostCard post={post} variant="featured-side" />
+        ))}
+      </div>
+    </section>
+  )}
+
+  <section class="stack section-gap" aria-labelledby="latest-title" data-reveal style="--reveal-delay: 120ms;">
+    <div class="section-head">
+      <div>
+        <p class="section-kicker">Latest Feed</p>
+        <h2 id="latest-title" class="section-title">最新文章</h2>
+        <p class="muted section-sub">按时间顺序浏览全部更新。</p>
+      </div>
+      <a class="link" href="/archive/">全部文章</a>
+    </div>
+
+    {pagePosts.length > 0 ? (
+      <>
+        <div class="post-grid">
+          {pagePosts.map((post) => (
+            <PostCard post={post} />
+          ))}
+        </div>
+        <Pagination
+          currentPage={1}
+          totalPages={totalPages}
+          baseUrl="/page"
+          firstPageUrl="/"
+        />
+      </>
+    ) : (
+      <p class="surface empty muted">更多文章正在路上。你可以先看精选内容，或在 <code>src/content/posts</code> 新增 Markdown。</p>
+    )}
+  </section>
+
+  <section class="stack section-gap" aria-labelledby="tag-title" data-reveal style="--reveal-delay: 160ms;">
+    <div>
+      <p class="section-kicker">Taxonomy</p>
+      <h2 id="tag-title" class="section-title">标签</h2>
+    </div>
+    {hotTags.length > 0 ? (
+      <div class="tag-list">
+        {hotTags.map((item) => (
+          <TagPill tag={item.tag} count={item.count} href={`/tags/${tagToUrlSegment(item.tag)}/`} />
+        ))}
+      </div>
+    ) : (
+      <p class="muted">暂无标签。</p>
+    )}
+  </section>
+</BaseLayout>
+
+<style>
+  .hero {
+    padding: clamp(1.2rem, 3vw, 1.8rem);
+    display: grid;
+    gap: 1rem;
+    align-items: stretch;
+    min-height: min(66vh, 500px);
+    border-radius: var(--radius-lg);
+  }
+
+  .hero-main {
+    gap: 0.9rem;
+    max-width: 56ch;
+    align-content: center;
+  }
+
+  .intro {
+    margin: 0;
+    font-size: clamp(1rem, 1.4vw, 1.08rem);
+    max-width: 48ch;
+  }
+
+  .hero-links {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .hero-links a {
+    border-radius: 999px;
+    min-height: 2.35rem;
+    padding: 0.42rem 0.95rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.92rem;
+    font-weight: 600;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .hero-links a:hover {
+    transform: translateY(-1px);
+  }
+
+  .hero-primary {
+    border: 1px solid rgba(159, 57, 34, 0.4);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.2), rgba(196, 82, 55, 0.12));
+    color: var(--accent-strong);
+  }
+
+  .hero-primary:hover {
+    border-color: rgba(159, 57, 34, 0.54);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.26), rgba(196, 82, 55, 0.16));
+    color: var(--accent-strong);
+  }
+
+  .hero-secondary {
+    border: 1px solid rgba(31, 120, 117, 0.28);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+  }
+
+  .hero-secondary:hover {
+    border-color: rgba(31, 120, 117, 0.46);
+    background: rgba(31, 120, 117, 0.14);
+    color: var(--accent-cyan);
+  }
+
+  .hero-panel {
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(218, 205, 184, 0.9);
+    background:
+      linear-gradient(160deg, rgba(255, 255, 255, 0.94), rgba(247, 239, 227, 0.9));
+    padding: 1rem;
+    display: grid;
+    gap: 0.85rem;
+    align-content: start;
+  }
+
+  .panel-title {
+    margin: 0;
+    color: var(--accent-cyan);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.74rem;
+  }
+
+  .hero-stats {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .stat-item {
+    margin: 0;
+    border: 1px solid rgba(218, 205, 184, 0.9);
+    border-radius: 12px;
+    padding: 0.58rem 0.62rem;
+    background: rgba(255, 255, 255, 0.76);
+  }
+
+  dt {
+    font-size: 0.71rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  dd {
+    margin: 0.38rem 0 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  .panel-note {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: 0.89rem;
+  }
+
+  .section-gap {
+    margin-top: 2.4rem;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .section-sub {
+    margin: 0.4rem 0 0;
+    font-size: 0.92rem;
+  }
+
+  .link {
+    font-size: 0.92rem;
+    color: var(--accent-cyan);
+    border: 1px solid rgba(31, 120, 117, 0.3);
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    transition:
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .link:hover {
+    border-color: rgba(31, 120, 117, 0.46);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+  }
+
+  .bento-grid {
+    display: grid;
+    gap: 0.95rem;
+  }
+
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .empty {
+    padding: 1rem;
+  }
+
+  @media (min-width: 980px) {
+    .hero {
+      grid-template-columns: 1.15fr 0.85fr;
+    }
+
+    .bento-grid {
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+    }
+
+    .bento-main {
+      grid-row: 1 / span 2;
+    }
+  }
+
+  @media (max-width: 979px) {
+    .hero-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 760px) {
+    .hero-stats {
+      grid-template-columns: 1fr;
+    }
+
+    .section-head {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+
+  :global(html[data-theme="dark"]) .hero-primary {
+    border-color: rgba(241, 141, 85, 0.42);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.22), rgba(241, 141, 85, 0.1));
+  }
+
+  :global(html[data-theme="dark"]) .hero-primary:hover {
+    border-color: rgba(241, 141, 85, 0.58);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.3), rgba(241, 141, 85, 0.16));
+  }
+
+  :global(html[data-theme="dark"]) .hero-secondary {
+    border-color: rgba(86, 198, 194, 0.34);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .hero-secondary:hover {
+    border-color: rgba(86, 198, 194, 0.52);
+    background: rgba(86, 198, 194, 0.2);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .hero-panel {
+    border-color: rgba(45, 59, 75, 0.95);
+    background: linear-gradient(160deg, rgba(26, 36, 48, 0.95), rgba(18, 26, 36, 0.9));
+  }
+
+  :global(html[data-theme="dark"]) .stat-item {
+    border-color: rgba(45, 59, 75, 0.95);
+    background: rgba(15, 23, 33, 0.86);
+  }
+
+  :global(html[data-theme="dark"]) .link {
+    border-color: rgba(86, 198, 194, 0.34);
+  }
+
+  :global(html[data-theme="dark"]) .link:hover {
+    border-color: rgba(86, 198, 194, 0.5);
+    background: rgba(86, 198, 194, 0.14);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-links a {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>

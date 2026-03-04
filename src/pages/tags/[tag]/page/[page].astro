@@ -1,0 +1,87 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Pagination from "@/components/Pagination.astro";
+import PostCard from "@/components/PostCard.astro";
+import { siteConfig } from "@/config/site";
+import {
+  getAllPublishedPosts,
+  getPostsByTag,
+  getTagsWithCount,
+  tagToParam,
+  tagToUrlSegment,
+  type PostEntry
+} from "@/utils/posts";
+
+type Props = {
+  tag: string;
+  posts: PostEntry[];
+  currentPage: number;
+  totalPages: number;
+  totalCount: number;
+};
+
+export async function getStaticPaths() {
+  const posts = await getAllPublishedPosts();
+  const tags = getTagsWithCount(posts).map((item) => item.tag);
+  const paths = [];
+
+  for (const tag of tags) {
+    const tagPosts = getPostsByTag(posts, tag);
+    const totalCount = tagPosts.length;
+    const totalPages = Math.ceil(totalCount / siteConfig.postsPerPage);
+
+    for (let page = 2; page <= totalPages; page += 1) {
+      const start = (page - 1) * siteConfig.postsPerPage;
+      const end = start + siteConfig.postsPerPage;
+      paths.push({
+        params: { tag: tagToParam(tag), page: String(page) },
+        props: {
+          tag,
+          posts: tagPosts.slice(start, end),
+          currentPage: page,
+          totalPages,
+          totalCount
+        }
+      });
+    }
+  }
+
+  return paths;
+}
+
+const { tag, posts, currentPage, totalPages, totalCount } = Astro.props as Props;
+---
+
+<BaseLayout
+  title={`标签: ${tag} - 第 ${currentPage} 页`}
+  canonicalPath={`/tags/${tagToUrlSegment(tag)}/page/${currentPage}/`}
+>
+  <section class="stack tag-page" data-reveal>
+    <div>
+      <p class="section-kicker">Tag Feed</p>
+      <h1 class="page-title">#{tag}</h1>
+    </div>
+    <p class="muted">
+      共 {totalCount} 篇文章，第 {currentPage} / {totalPages} 页
+    </p>
+
+    <div class="post-grid">
+      {posts.map((post) => (
+        <PostCard post={post} />
+      ))}
+    </div>
+
+    <Pagination
+      currentPage={currentPage}
+      totalPages={totalPages}
+      baseUrl={`/tags/${tagToUrlSegment(tag)}/page`}
+      firstPageUrl={`/tags/${tagToUrlSegment(tag)}/`}
+    />
+  </section>
+</BaseLayout>
+
+<style>
+  .tag-page {
+    gap: 1.05rem;
+  }
+</style>

@@ -1,0 +1,644 @@
+---
+import AnalyticsScript from "@/components/AnalyticsScript.astro";
+import MotionController from "@/components/MotionController.astro";
+import { siteConfig } from "@/config/site";
+import "@/styles/global.css";
+
+type Props = {
+  title?: string;
+  description?: string;
+  canonicalPath?: string;
+  image?: string;
+};
+
+const {
+  title,
+  description = siteConfig.description,
+  canonicalPath = Astro.url.pathname,
+  image
+} = Astro.props as Props;
+
+const pageTitle = title ? `${title} | ${siteConfig.title}` : siteConfig.title;
+const canonical = new URL(canonicalPath, siteConfig.siteUrl).toString();
+const socialImage = image ? new URL(image, siteConfig.siteUrl).toString() : undefined;
+const currentPath = Astro.url.pathname;
+const navItems = [
+  { href: "/", label: "首页" },
+  { href: "/tags/", label: "标签" },
+  { href: "/archive/", label: "归档" },
+  { href: "/about/", label: "关于" }
+];
+const darkThemeColor = "#0f151c";
+
+const isNavActive = (href: string) => {
+  if (href === "/") {
+    return currentPath === "/";
+  }
+  return currentPath.startsWith(href);
+};
+---
+
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content={siteConfig.title} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta
+      name="theme-color"
+      content={siteConfig.accentColor}
+      data-theme-color
+      data-light-theme-color={siteConfig.accentColor}
+      data-dark-theme-color={darkThemeColor}
+    />
+    {socialImage && <meta property="og:image" content={socialImage} />}
+    {socialImage && <meta name="twitter:image" content={socialImage} />}
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script is:inline>
+      (() => {
+        const STORAGE_KEY = "uent26-theme";
+        const LIGHT = "light";
+        const DARK = "dark";
+        const root = document.documentElement;
+        const themeColorMeta = document.querySelector("meta[data-theme-color]");
+        const LIGHT_THEME_COLOR = themeColorMeta?.getAttribute("data-light-theme-color") ?? "#c45237";
+        const DARK_THEME_COLOR = themeColorMeta?.getAttribute("data-dark-theme-color") ?? "#0f151c";
+
+        const getStoredTheme = () => {
+          try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored === LIGHT || stored === DARK) {
+              return stored;
+            }
+          } catch {}
+          return null;
+        };
+
+        const storedTheme = getStoredTheme();
+        const preferredTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? DARK : LIGHT;
+        const theme = storedTheme ?? preferredTheme;
+        root.setAttribute("data-theme", theme);
+        if (themeColorMeta) {
+          themeColorMeta.setAttribute("content", theme === DARK ? DARK_THEME_COLOR : LIGHT_THEME_COLOR);
+        }
+      })();
+    </script>
+    <title>{pageTitle}</title>
+  </head>
+  <body>
+    <div class="reading-progress" data-reading-progress aria-hidden="true">
+      <span class="reading-progress-bar" data-reading-progress-bar></span>
+    </div>
+
+    <div class="site-decor" aria-hidden="true">
+      <span class="wash wash-a"></span>
+      <span class="wash wash-b"></span>
+      <span class="line-overlay"></span>
+      <span class="noise-overlay"></span>
+    </div>
+
+    <header class="site-header">
+      <div class="container nav-wrap">
+        <a class="brand" href="/">
+          <strong>UEnt26</strong>
+          <span>Notes from the Frontend Desk</span>
+        </a>
+        <nav aria-label="主导航">
+          <ul class="nav-list">
+            {navItems.map((item) => (
+              <li>
+                <a class:list={["nav-link", { active: isNavActive(item.href) }]} href={item.href}>
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <div class="header-actions">
+          <a class="header-cta" href="/rss.xml">订阅 RSS</a>
+          <button
+            class="theme-toggle"
+            type="button"
+            data-theme-toggle
+            aria-label="切换到夜间模式"
+            aria-pressed="false"
+          >
+            <span class="theme-toggle-dot" aria-hidden="true"></span>
+            <span data-theme-toggle-label>夜间</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container page-content">
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-wrap">
+        <p class="copyright">© {new Date().getFullYear()} {siteConfig.author}. All rights reserved.</p>
+        <ul class="social-list" aria-label="社交链接">
+          {siteConfig.socialLinks.map((item) => (
+            <li><a href={item.href}>{item.label}</a></li>
+          ))}
+        </ul>
+      </div>
+    </footer>
+    <script is:inline>
+      (() => {
+        const STORAGE_KEY = "uent26-theme";
+        const LIGHT = "light";
+        const DARK = "dark";
+        const root = document.documentElement;
+        const toggle = document.querySelector("[data-theme-toggle]");
+        const toggleLabel = document.querySelector("[data-theme-toggle-label]");
+        const themeColorMeta = document.querySelector("meta[data-theme-color]");
+        const LIGHT_THEME_COLOR = themeColorMeta?.getAttribute("data-light-theme-color") ?? "#c45237";
+        const DARK_THEME_COLOR = themeColorMeta?.getAttribute("data-dark-theme-color") ?? "#0f151c";
+
+        if (!(toggle instanceof HTMLButtonElement) || !(toggleLabel instanceof HTMLElement)) {
+          return;
+        }
+
+        const getStoredTheme = () => {
+          try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored === LIGHT || stored === DARK) {
+              return stored;
+            }
+          } catch {}
+          return null;
+        };
+
+        const setStoredTheme = (theme) => {
+          try {
+            localStorage.setItem(STORAGE_KEY, theme);
+          } catch {}
+        };
+
+        const applyTheme = (theme) => {
+          const isDark = theme === DARK;
+          root.setAttribute("data-theme", theme);
+          toggle.setAttribute("aria-pressed", String(isDark));
+          toggle.setAttribute("aria-label", isDark ? "切换到日间模式" : "切换到夜间模式");
+          toggleLabel.textContent = isDark ? "日间" : "夜间";
+          if (themeColorMeta) {
+            themeColorMeta.setAttribute("content", isDark ? DARK_THEME_COLOR : LIGHT_THEME_COLOR);
+          }
+        };
+
+        const initial = root.getAttribute("data-theme") === DARK ? DARK : LIGHT;
+        applyTheme(initial);
+
+        toggle.addEventListener("click", () => {
+          const next = root.getAttribute("data-theme") === DARK ? LIGHT : DARK;
+          setStoredTheme(next);
+          applyTheme(next);
+        });
+
+        const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+        const handleSystemChange = (event) => {
+          if (getStoredTheme()) {
+            return;
+          }
+          applyTheme(event.matches ? DARK : LIGHT);
+        };
+
+        if (typeof mediaQuery.addEventListener === "function") {
+          mediaQuery.addEventListener("change", handleSystemChange);
+        } else if (typeof mediaQuery.addListener === "function") {
+          mediaQuery.addListener(handleSystemChange);
+        }
+      })();
+    </script>
+    <AnalyticsScript />
+    <MotionController />
+  </body>
+</html>
+
+<style>
+  .reading-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    z-index: 70;
+    background: rgba(33, 28, 24, 0.06);
+    opacity: 0;
+    transition: opacity 260ms var(--ease-out);
+  }
+
+  .reading-progress.is-active {
+    opacity: 1;
+  }
+
+  .reading-progress-bar {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform-origin: 0 50%;
+    transform: scaleX(0);
+    background: linear-gradient(90deg, var(--accent), var(--accent-cyan));
+    box-shadow: 0 0 18px rgba(196, 82, 55, 0.35);
+  }
+
+  .site-decor {
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+  }
+
+  .wash {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(36px);
+    opacity: 0.8;
+  }
+
+  .wash-a {
+    width: min(52vw, 620px);
+    aspect-ratio: 1;
+    top: -240px;
+    right: -140px;
+    background: radial-gradient(circle, rgba(196, 82, 55, 0.24), transparent 68%);
+  }
+
+  .wash-b {
+    width: min(50vw, 580px);
+    aspect-ratio: 1;
+    left: -210px;
+    top: 42vh;
+    background: radial-gradient(circle, rgba(31, 120, 117, 0.2), transparent 70%);
+  }
+
+  .line-overlay {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(31, 120, 117, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(31, 120, 117, 0.06) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(circle at 50% -16%, black 0%, transparent 78%);
+    opacity: 0.34;
+  }
+
+  .noise-overlay {
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 18% 22%, rgba(33, 28, 24, 0.2) 0.6px, transparent 1px),
+      radial-gradient(circle at 72% 64%, rgba(33, 28, 24, 0.16) 0.6px, transparent 1px);
+    background-size: 5px 5px, 7px 7px;
+    opacity: var(--noise-opacity);
+  }
+
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    padding-top: 0.85rem;
+  }
+
+  .nav-wrap {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    min-height: 74px;
+    gap: 1rem;
+    border-radius: 999px;
+    border: 1px solid rgba(218, 205, 184, 0.9);
+    background: rgba(248, 243, 233, 0.84);
+    backdrop-filter: blur(12px) saturate(130%);
+    box-shadow: 0 12px 30px rgba(76, 56, 32, 0.12);
+    padding: 0.5rem 0.7rem 0.5rem 1.1rem;
+  }
+
+  .brand {
+    display: inline-grid;
+    gap: 0.2rem;
+    color: var(--text);
+  }
+
+  .brand strong {
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+    font-size: 1.03rem;
+    letter-spacing: 0.03em;
+  }
+
+  .brand span {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.63rem;
+    letter-spacing: 0.1em;
+    color: var(--accent-cyan);
+    text-transform: uppercase;
+  }
+
+  nav {
+    justify-self: center;
+  }
+
+  .nav-list {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    list-style: none;
+    gap: 0.5rem;
+    font-size: 0.92rem;
+  }
+
+  .nav-link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 2rem;
+    padding-inline: 0.72rem;
+    border-radius: 999px;
+    color: var(--text-soft);
+    border: 1px solid transparent;
+    transition:
+      color var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out),
+      background var(--duration-fast) var(--ease-out),
+      transform var(--duration-fast) var(--ease-out);
+  }
+
+  .nav-link:hover {
+    color: var(--text);
+    border-color: rgba(196, 82, 55, 0.28);
+    background: rgba(196, 82, 55, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .nav-link.active {
+    color: var(--text);
+    border-color: rgba(197, 180, 153, 0.9);
+    background: linear-gradient(120deg, rgba(255, 255, 255, 0.92), rgba(241, 232, 218, 0.95));
+    box-shadow: 0 6px 18px rgba(76, 56, 32, 0.12);
+  }
+
+  .header-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    border-radius: 999px;
+    border: 1px solid rgba(159, 57, 34, 0.28);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.16), rgba(196, 82, 55, 0.06));
+    color: var(--accent-strong);
+    font-size: 0.82rem;
+    letter-spacing: 0.03em;
+    font-weight: 600;
+    min-height: 2.1rem;
+    padding-inline: 0.82rem;
+    transition:
+      transform var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out),
+      background var(--duration-fast) var(--ease-out);
+  }
+
+  .header-cta:hover {
+    transform: translateY(-1px);
+    border-color: rgba(159, 57, 34, 0.42);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.22), rgba(196, 82, 55, 0.12));
+  }
+
+  .header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    border-radius: 999px;
+    border: 1px solid rgba(31, 120, 117, 0.3);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+    font-size: 0.8rem;
+    font-weight: 600;
+    min-height: 2.1rem;
+    padding: 0.24rem 0.72rem 0.24rem 0.62rem;
+    cursor: pointer;
+    transition:
+      transform var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out),
+      background var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+
+  .theme-toggle:hover {
+    transform: translateY(-1px);
+    border-color: rgba(31, 120, 117, 0.46);
+    background: rgba(31, 120, 117, 0.14);
+  }
+
+  .theme-toggle-dot {
+    width: 0.8rem;
+    height: 0.8rem;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    box-shadow: inset -0.18rem -0.14rem 0 currentColor;
+    transition: box-shadow var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
+  }
+
+  .theme-toggle[aria-pressed="true"] .theme-toggle-dot {
+    background: currentColor;
+    box-shadow: inset 0 0 0 0 currentColor;
+  }
+
+  .page-content {
+    position: relative;
+    z-index: 1;
+    padding-block: 2rem 3.8rem;
+    min-height: calc(100vh - 194px);
+  }
+
+  .site-footer {
+    border-top: 1px solid rgba(218, 205, 184, 0.9);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(246, 239, 225, 0.56));
+  }
+
+  .footer-wrap {
+    min-height: 84px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.88rem;
+    color: var(--text-soft);
+  }
+
+  .copyright {
+    margin: 0;
+  }
+
+  .social-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    gap: 0.65rem;
+  }
+
+  .social-list a {
+    color: var(--text-soft);
+    font-size: 0.83rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 0.27rem 0.62rem;
+  }
+
+  .social-list a:hover {
+    color: var(--accent-cyan);
+    border-color: rgba(31, 120, 117, 0.32);
+    background: rgba(31, 120, 117, 0.08);
+  }
+
+  @media (max-width: 940px) {
+    .nav-wrap {
+      grid-template-columns: 1fr auto;
+      min-height: auto;
+      border-radius: 22px;
+      padding: 0.7rem 0.72rem 0.78rem;
+      row-gap: 0.68rem;
+    }
+
+    nav {
+      grid-column: 1 / -1;
+      justify-self: stretch;
+    }
+
+    .nav-list {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .nav-link {
+      padding-inline: 0.58rem;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .brand span {
+      display: none;
+    }
+
+    .header-cta {
+      font-size: 0.76rem;
+      min-height: 2rem;
+      padding-inline: 0.68rem;
+    }
+
+    .theme-toggle {
+      font-size: 0.75rem;
+      min-height: 2rem;
+      padding: 0.22rem 0.62rem;
+    }
+
+    .header-actions {
+      gap: 0.42rem;
+    }
+
+    .footer-wrap {
+      flex-direction: column;
+      justify-content: center;
+      text-align: center;
+      padding-block: 1rem;
+    }
+  }
+
+  :global(html[data-theme="dark"]) .reading-progress {
+    background: rgba(231, 237, 246, 0.08);
+  }
+
+  :global(html[data-theme="dark"]) .reading-progress-bar {
+    box-shadow: 0 0 18px rgba(241, 141, 85, 0.45);
+  }
+
+  :global(html[data-theme="dark"]) .wash-a {
+    background: radial-gradient(circle, rgba(241, 141, 85, 0.28), transparent 68%);
+  }
+
+  :global(html[data-theme="dark"]) .wash-b {
+    background: radial-gradient(circle, rgba(86, 198, 194, 0.23), transparent 70%);
+  }
+
+  :global(html[data-theme="dark"]) .line-overlay {
+    background-image:
+      linear-gradient(rgba(86, 198, 194, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(86, 198, 194, 0.1) 1px, transparent 1px);
+    opacity: 0.28;
+  }
+
+  :global(html[data-theme="dark"]) .noise-overlay {
+    background-image:
+      radial-gradient(circle at 18% 22%, rgba(231, 237, 246, 0.18) 0.6px, transparent 1px),
+      radial-gradient(circle at 72% 64%, rgba(231, 237, 246, 0.14) 0.6px, transparent 1px);
+  }
+
+  :global(html[data-theme="dark"]) .nav-wrap {
+    border-color: rgba(45, 59, 75, 0.94);
+    background: rgba(18, 26, 36, 0.82);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.36);
+  }
+
+  :global(html[data-theme="dark"]) .nav-link:hover {
+    border-color: rgba(241, 141, 85, 0.38);
+    background: rgba(241, 141, 85, 0.14);
+  }
+
+  :global(html[data-theme="dark"]) .nav-link.active {
+    border-color: rgba(64, 82, 103, 0.95);
+    background: linear-gradient(120deg, rgba(26, 36, 48, 0.96), rgba(17, 24, 34, 0.98));
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  }
+
+  :global(html[data-theme="dark"]) .header-cta {
+    border-color: rgba(241, 141, 85, 0.38);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.2), rgba(241, 141, 85, 0.08));
+    color: var(--accent-strong);
+  }
+
+  :global(html[data-theme="dark"]) .header-cta:hover {
+    border-color: rgba(241, 141, 85, 0.52);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.28), rgba(241, 141, 85, 0.16));
+  }
+
+  :global(html[data-theme="dark"]) .theme-toggle {
+    border-color: rgba(86, 198, 194, 0.34);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .theme-toggle:hover {
+    border-color: rgba(86, 198, 194, 0.5);
+    background: rgba(86, 198, 194, 0.2);
+  }
+
+  :global(html[data-theme="dark"]) .site-footer {
+    border-top: 1px solid rgba(45, 59, 75, 0.95);
+    background: linear-gradient(180deg, rgba(16, 24, 34, 0.76), rgba(12, 18, 27, 0.92));
+  }
+
+  :global(html[data-theme="dark"]) .social-list a:hover {
+    border-color: rgba(86, 198, 194, 0.42);
+    background: rgba(86, 198, 194, 0.14);
+  }
+</style>

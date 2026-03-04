@@ -1,0 +1,48 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="关于">
+  <section class="surface about stack" data-reveal>
+    <p class="section-kicker">About</p>
+    <h1 class="page-title">关于我</h1>
+    <p class="muted">
+      随手做的纯前端静态博客。
+    </p>
+
+    <div class="stack feature-list">
+      <h2>这个站点的技术特点</h2>
+      <ul>
+        <li>Astro 静态生成，Markdown 驱动内容。</li>
+        <li>固定暗黑模式 + 绿色主题设计系统。</li>
+        <li>Shiki 构建期代码高亮，移动端可滚动代码块。</li>
+        <li>内置标签、归档、RSS、Sitemap 和 GitHub Pages 发布流程。</li>
+      </ul>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .about {
+    padding: 1.3rem;
+    gap: 1rem;
+    border-radius: var(--radius-lg);
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 1.18rem;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 1.15rem;
+    display: grid;
+    gap: 0.48rem;
+  }
+
+  .feature-list {
+    margin-top: 0.2rem;
+  }
+</style>

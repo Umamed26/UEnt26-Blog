@@ -1,0 +1,162 @@
+---
+type Props = {
+  currentPage: number;
+  totalPages: number;
+  baseUrl: string;
+  firstPageUrl: string;
+};
+
+const { currentPage, totalPages, baseUrl, firstPageUrl } = Astro.props as Props;
+
+if (totalPages <= 1) {
+  return null;
+}
+
+const buildUrl = (page: number) => (page <= 1 ? firstPageUrl : `${baseUrl}/${page}/`);
+
+const windowSize = 2;
+const pages = Array.from({ length: totalPages }, (_, index) => index + 1).filter((page) => {
+  if (page <= 1 || page >= totalPages) {
+    return true;
+  }
+  return Math.abs(page - currentPage) <= windowSize;
+});
+---
+
+<nav class="pager" aria-label="分页导航">
+  <a
+    class:list={["pager-link", { disabled: currentPage <= 1 }]}
+    href={currentPage > 1 ? buildUrl(currentPage - 1) : undefined}
+    aria-disabled={currentPage <= 1}
+  >
+    上一页
+  </a>
+
+  <ol class="pager-list">
+    {pages.map((page, index) => (
+      <>
+        {index > 0 && pages[index - 1] !== page - 1 && <li class="ellipsis">…</li>}
+        <li>
+          <a
+            class:list={["pager-num", { active: page === currentPage }]}
+            href={buildUrl(page)}
+            aria-current={page === currentPage ? "page" : undefined}
+          >
+            {page}
+          </a>
+        </li>
+      </>
+    ))}
+  </ol>
+
+  <a
+    class:list={["pager-link", { disabled: currentPage >= totalPages }]}
+    href={currentPage < totalPages ? buildUrl(currentPage + 1) : undefined}
+    aria-disabled={currentPage >= totalPages}
+  >
+    下一页
+  </a>
+</nav>
+
+<style>
+  .pager {
+    margin-top: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+
+  .pager-link {
+    border: 1px solid rgba(159, 57, 34, 0.28);
+    border-radius: 999px;
+    padding: 0.4rem 0.9rem;
+    color: var(--text);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.15), rgba(196, 82, 55, 0.06));
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      box-shadow 220ms var(--ease-out);
+  }
+
+  .pager-link:hover {
+    transform: translateY(-1px);
+    border-color: rgba(159, 57, 34, 0.46);
+    box-shadow: 0 8px 16px rgba(76, 56, 32, 0.14);
+  }
+
+  .pager-link.disabled {
+    pointer-events: none;
+    color: var(--text-soft);
+    opacity: 0.55;
+  }
+
+  .pager-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .pager-num {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    border: 1px solid rgba(218, 205, 184, 0.94);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-soft);
+    transition:
+      border-color 220ms var(--ease-out),
+      transform 220ms var(--ease-out),
+      color 220ms var(--ease-out);
+  }
+
+  .pager-num:hover {
+    color: var(--text);
+    border-color: rgba(31, 120, 117, 0.45);
+    transform: translateY(-1px);
+  }
+
+  .pager-num.active {
+    color: #fff;
+    background: linear-gradient(120deg, var(--accent), var(--accent-strong));
+    border-color: rgba(159, 57, 34, 0.76);
+    box-shadow: 0 10px 22px rgba(196, 82, 55, 0.22);
+    font-weight: 700;
+  }
+
+  .ellipsis {
+    color: var(--text-soft);
+    width: 1rem;
+    text-align: center;
+  }
+
+  :global(html[data-theme="dark"]) .pager-link {
+    border-color: rgba(241, 141, 85, 0.36);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.2), rgba(241, 141, 85, 0.08));
+  }
+
+  :global(html[data-theme="dark"]) .pager-link:hover {
+    border-color: rgba(241, 141, 85, 0.5);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.32);
+  }
+
+  :global(html[data-theme="dark"]) .pager-num {
+    border-color: rgba(45, 59, 75, 0.95);
+    background: rgba(18, 26, 36, 0.6);
+  }
+
+  :global(html[data-theme="dark"]) .pager-num:hover {
+    border-color: rgba(86, 198, 194, 0.54);
+  }
+
+  :global(html[data-theme="dark"]) .pager-num.active {
+    border-color: rgba(241, 141, 85, 0.82);
+    box-shadow: 0 10px 22px rgba(241, 141, 85, 0.25);
+  }
+</style>

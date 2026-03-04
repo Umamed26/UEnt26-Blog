@@ -1,0 +1,19 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="页面不存在">
+  <section class="surface not-found stack">
+    <h1 class="page-title">404</h1>
+    <p class="muted">你访问的页面不存在，可能已被移动或删除。</p>
+    <p><a href="/">返回首页</a></p>
+  </section>
+</BaseLayout>
+
+<style>
+  .not-found {
+    padding: 2rem 1.2rem;
+    text-align: center;
+    justify-items: center;
+  }
+</style>
