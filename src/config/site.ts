@@ -17,7 +17,7 @@ export type SiteConfig = {
 
 export const siteConfig: SiteConfig = {
   title: "UEnt26 Blog",
-  description: "一个专注技术与写作的纯前端个人博客。",
+  description: "纯前端个人博客。专注游戏和科技。",
   siteUrl: import.meta.env.SITE_URL ?? "https://example.com",
   author: "UEnt26",
   accentColor: "#c45237",
