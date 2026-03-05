@@ -1,0 +1,148 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+
+const updatedAt = new Date().toLocaleDateString("zh-CN");
+
+const focusItems = [
+  {
+    title: "内容重心",
+    detail: "持续输出前端工程、游戏体验和个人创作流程相关内容。"
+  },
+  {
+    title: "写作节奏",
+    detail: "每次更新都优先保证可复现和可落地，减少纯概念文章。"
+  },
+  {
+    title: "站点演进",
+    detail: "把博客逐步做成个人产品：搜索、推荐、留言、项目展示。"
+  }
+];
+
+const nowList = [
+  "整理过去文章标签体系，减少重复标签。",
+  "补齐项目页与联络页，完善个人网站信息架构。",
+  "维护归档与搜索体验，优化移动端可读性。"
+];
+
+const nextList = [
+  "尝试加入 Newsletter 订阅流程。",
+  "给项目页增加案例拆解与复盘模板。",
+  "完善文章 SEO 元数据和结构化信息。"
+];
+---
+
+<BaseLayout title="Now">
+  <section class="stack now-page" data-reveal>
+    <header class="surface now-hero">
+      <p class="section-kicker">Now</p>
+      <h1 class="page-title">我现在在做什么</h1>
+      <p class="muted">
+        这个页面记录近期关注点和下一步计划。最后更新：{updatedAt}。
+      </p>
+    </header>
+
+    <section class="focus-grid" data-reveal style="--reveal-delay: 70ms;">
+      {focusItems.map((item) => (
+        <article class="surface focus-card">
+          <h2>{item.title}</h2>
+          <p class="muted">{item.detail}</p>
+        </article>
+      ))}
+    </section>
+
+    <section class="stack section-wrap" data-reveal style="--reveal-delay: 110ms;">
+      <h2 class="section-title">正在推进</h2>
+      <ul class="now-list">
+        {nowList.map((item) => (
+          <li>{item}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="stack section-wrap" data-reveal style="--reveal-delay: 150ms;">
+      <h2 class="section-title">接下来</h2>
+      <ul class="now-list">
+        {nextList.map((item) => (
+          <li>{item}</li>
+        ))}
+      </ul>
+    </section>
+  </section>
+</BaseLayout>
+
+<style>
+  .now-page {
+    gap: 1rem;
+  }
+
+  .now-hero {
+    padding: 1.2rem;
+    border-radius: var(--radius-lg);
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .now-hero p {
+    margin: 0;
+  }
+
+  .focus-grid {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .focus-card {
+    padding: 0.95rem;
+    border-radius: 16px;
+    border-color: rgba(218, 205, 184, 0.9);
+    display: grid;
+    gap: 0.46rem;
+  }
+
+  .focus-card h2 {
+    margin: 0;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+    font-size: 1.08rem;
+    line-height: 1.3;
+  }
+
+  .focus-card p {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.54;
+  }
+
+  .section-wrap {
+    border: 1px solid rgba(218, 205, 184, 0.9);
+    border-radius: 16px;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.42);
+  }
+
+  .now-list {
+    margin: 0;
+    padding-left: 1.15rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .now-list li {
+    color: var(--text);
+    line-height: 1.55;
+  }
+
+  @media (min-width: 860px) {
+    .focus-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  :global(html[data-theme="dark"]) .focus-card,
+  :global(html[data-theme="dark"]) .section-wrap {
+    border-color: rgba(45, 59, 75, 0.95);
+  }
+
+  :global(html[data-theme="dark"]) .section-wrap {
+    background: rgba(16, 24, 34, 0.46);
+  }
+</style>

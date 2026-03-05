@@ -1,0 +1,183 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { siteConfig } from "@/config/site";
+import { withBasePath } from "@/utils/paths";
+
+const githubLink =
+  siteConfig.socialLinks.find((item) => item.label.toLowerCase().includes("github"))?.href ||
+  "https://github.com/";
+
+const contactCards = [
+  {
+    title: "留言板",
+    desc: "适合公开交流、反馈建议或简单打招呼。",
+    href: withBasePath("/guestbook/"),
+    action: "去留言"
+  },
+  {
+    title: "GitHub",
+    desc: "适合项目协作、代码讨论和 issue 反馈。",
+    href: githubLink,
+    action: "访问 GitHub"
+  },
+  {
+    title: "RSS",
+    desc: "想追踪更新节奏，推荐直接订阅 RSS。",
+    href: withBasePath("/rss.xml"),
+    action: "订阅更新"
+  }
+];
+
+const cooperationNotes = [
+  "主题建议：前端工程实践、Astro 建站、博客体验优化。",
+  "问题描述尽量包含背景、预期结果和你已尝试的方案。",
+  "如果是合作邀请，建议写明目标、周期和预算范围。"
+];
+---
+
+<BaseLayout title="Contact">
+  <section class="stack contact-page" data-reveal>
+    <header class="surface contact-hero">
+      <p class="section-kicker">Contact</p>
+      <h1 class="page-title">联系我</h1>
+      <p class="muted">
+        欢迎交流创作、技术和项目合作。你可以从下面任一方式发起联系。
+      </p>
+    </header>
+
+    <section class="contact-grid" data-reveal style="--reveal-delay: 70ms;">
+      {contactCards.map((card) => (
+        <article class="surface contact-card">
+          <h2>{card.title}</h2>
+          <p class="muted">{card.desc}</p>
+          <a href={card.href}>{card.action}</a>
+        </article>
+      ))}
+    </section>
+
+    <section class="surface contact-note" data-reveal style="--reveal-delay: 120ms;">
+      <h2>联系建议</h2>
+      <ul>
+        {cooperationNotes.map((item) => (
+          <li>{item}</li>
+        ))}
+      </ul>
+      <p class="muted">
+        当前站点作者：{siteConfig.author}
+      </p>
+    </section>
+  </section>
+</BaseLayout>
+
+<style>
+  .contact-page {
+    gap: 1rem;
+  }
+
+  .contact-hero {
+    padding: 1.2rem;
+    border-radius: var(--radius-lg);
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .contact-hero p {
+    margin: 0;
+  }
+
+  .contact-grid {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .contact-card {
+    padding: 1rem;
+    border-radius: 16px;
+    border-color: rgba(218, 205, 184, 0.9);
+    display: grid;
+    gap: 0.58rem;
+  }
+
+  .contact-card h2 {
+    margin: 0;
+    font-size: 1.12rem;
+    line-height: 1.35;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  }
+
+  .contact-card p {
+    margin: 0;
+    line-height: 1.54;
+  }
+
+  .contact-card a {
+    width: fit-content;
+    border-radius: 999px;
+    border: 1px solid rgba(31, 120, 117, 0.34);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.22rem 0.68rem;
+    transition:
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out),
+      transform 220ms var(--ease-out);
+  }
+
+  .contact-card a:hover {
+    transform: translateY(-1px);
+    border-color: rgba(31, 120, 117, 0.52);
+    background: rgba(31, 120, 117, 0.16);
+    color: var(--accent-cyan);
+  }
+
+  .contact-note {
+    padding: 1rem;
+    border-radius: 16px;
+    border-color: rgba(218, 205, 184, 0.9);
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .contact-note h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  }
+
+  .contact-note ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.46rem;
+  }
+
+  .contact-note p {
+    margin: 0;
+    font-size: 0.9rem;
+  }
+
+  @media (min-width: 860px) {
+    .contact-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  :global(html[data-theme="dark"]) .contact-card,
+  :global(html[data-theme="dark"]) .contact-note {
+    border-color: rgba(45, 59, 75, 0.95);
+  }
+
+  :global(html[data-theme="dark"]) .contact-card a {
+    border-color: rgba(86, 198, 194, 0.34);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .contact-card a:hover {
+    border-color: rgba(86, 198, 194, 0.52);
+    background: rgba(86, 198, 194, 0.2);
+    color: var(--accent-cyan-soft);
+  }
+</style>

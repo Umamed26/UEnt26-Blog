@@ -1,0 +1,77 @@
+---
+import GiscusComments from "@/components/GiscusComments.astro";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+
+const rules = [
+  "可以分享你从哪篇文章来到这里，或你在关注什么主题。",
+  "欢迎留下问题、建议、站点反馈，后续我会集中回复。",
+  "请保持友好和尊重，避免发布无关广告。"
+];
+---
+
+<BaseLayout title="Guestbook">
+  <section class="stack guestbook-page" data-reveal>
+    <header class="surface guestbook-hero">
+      <p class="section-kicker">Guestbook</p>
+      <h1 class="page-title">留言板</h1>
+      <p class="muted">
+        欢迎在这里留下你的足迹。
+      </p>
+    </header>
+
+    <section class="surface guestbook-rules" data-reveal style="--reveal-delay: 70ms;">
+      <h2>留言说明</h2>
+      <ul>
+        {rules.map((item) => (
+          <li>{item}</li>
+        ))}
+      </ul>
+    </section>
+
+    <div data-reveal style="--reveal-delay: 120ms;">
+      <GiscusComments />
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .guestbook-page {
+    gap: 1rem;
+  }
+
+  .guestbook-hero {
+    padding: 1.2rem;
+    border-radius: var(--radius-lg);
+    display: grid;
+    gap: 0.66rem;
+  }
+
+  .guestbook-hero p {
+    margin: 0;
+  }
+
+  .guestbook-rules {
+    border-radius: 16px;
+    border-color: rgba(218, 205, 184, 0.9);
+    padding: 1rem;
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .guestbook-rules h2 {
+    margin: 0;
+    font-size: 1.08rem;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  }
+
+  .guestbook-rules ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  :global(html[data-theme="dark"]) .guestbook-rules {
+    border-color: rgba(45, 59, 75, 0.95);
+  }
+</style>
