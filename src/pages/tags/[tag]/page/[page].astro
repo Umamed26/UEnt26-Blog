@@ -21,7 +21,7 @@ type Props = {
 };
 
 export async function getStaticPaths() {
-  const posts = await getAllPublishedPosts();
+  const posts = await getAllPublishedPosts({ includeHidden: true });
   const tags = getTagsWithCount(posts).map((item) => item.tag);
   const paths = [];
 

@@ -61,11 +61,14 @@ npm run preview
 当前 schema（`src/content/config.ts`）要求如下：
 
 - 必填：`title`、`description`、`pubDate`
-- 可选：`updatedDate`、`tags`、`draft`、`pinned`、`cover`、`toc`
+- 可选：`updatedDate`、`tags`、`draft`、`pinned`、`cover`、`toc`、`hidden`、`unlockCode`、`revealCode`
 - 约束：
   - `pinned` 必须是正整数（例如 `1`、`2`）
   - `draft` 默认 `false`
   - `toc` 默认 `true`
+  - `hidden` 默认 `false`
+  - `hidden: true` 时必须提供 `unlockCode`
+  - `revealCode` 用于在文章末尾展示解锁码（可选）
 
 推荐 Frontmatter 示例：
 
@@ -80,6 +83,9 @@ draft: false
 pinned: 1
 cover: "/images/cover.jpg"
 toc: true
+hidden: false
+unlockCode: "ALPHA-42"
+revealCode: "ALPHA-42"
 ---
 ```
 

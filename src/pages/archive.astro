@@ -1,13 +1,13 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { getAllPublishedPosts, getPostTags, tagToUrlSegment } from "@/utils/posts";
+import { getAllPublishedPosts, getPostTags, normalizeUnlockCode, tagToUrlSegment } from "@/utils/posts";
 import { withBasePath } from "@/utils/paths";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 const getDateKey = (date: Date) => date.toISOString().slice(0, 10);
 const tagBaseHref = withBasePath("/tags/");
 
-const posts = await getAllPublishedPosts();
+const posts = await getAllPublishedPosts({ includeHidden: true });
 
 const archiveItems = posts.map((post) => {
   const published = post.data.pubDate;
@@ -23,6 +23,8 @@ const archiveItems = posts.map((post) => {
     title: post.data.title,
     description: post.data.description,
     tags,
+    hidden: post.data.hidden,
+    unlockCode: normalizeUnlockCode(post.data.unlockCode),
     year,
     month,
     day,
@@ -37,25 +39,35 @@ const archiveItems = posts.map((post) => {
   };
 });
 
-const archiveYears = [...new Set(archiveItems.map((item) => item.year))].sort(
+const visibleArchiveItems = archiveItems.filter((item) => !item.hidden);
+
+const archiveYears = [...new Set(visibleArchiveItems.map((item) => item.year))].sort(
   (a, b) => Number(b) - Number(a)
 );
-const allTags = [...new Set(archiveItems.flatMap((item) => item.tags))].sort((a, b) =>
+const allTags = [...new Set(visibleArchiveItems.flatMap((item) => item.tags))].sort((a, b) =>
   a.localeCompare(b, "zh-Hans-CN")
 );
 const totalTags = allTags.length;
 
-const minDate = archiveItems.length
-  ? archiveItems.reduce((min, item) => (item.dateKey < min ? item.dateKey : min), archiveItems[0].dateKey)
+const minDate = visibleArchiveItems.length
+  ? visibleArchiveItems.reduce(
+      (min, item) => (item.dateKey < min ? item.dateKey : min),
+      visibleArchiveItems[0].dateKey
+    )
   : undefined;
-const maxDate = archiveItems.length
-  ? archiveItems.reduce((max, item) => (item.dateKey > max ? item.dateKey : max), archiveItems[0].dateKey)
+const maxDate = visibleArchiveItems.length
+  ? visibleArchiveItems.reduce(
+      (max, item) => (item.dateKey > max ? item.dateKey : max),
+      visibleArchiveItems[0].dateKey
+    )
   : undefined;
 
 const fallbackGroups = archiveYears.map((year) => ({
   key: year,
   label: `${year} 年`,
-  items: archiveItems.filter((item) => item.year === year).sort((a, b) => b.timestamp - a.timestamp)
+  items: visibleArchiveItems
+    .filter((item) => item.year === year)
+    .sort((a, b) => b.timestamp - a.timestamp)
 }));
 ---
 
@@ -67,11 +79,11 @@ const fallbackGroups = archiveYears.map((year) => ({
         <h1 class="page-title">归档</h1>
       </div>
       <p class="muted">
-        支持按年、月、日、日期区间、标签与关键词的组合筛选。当前共有 {archiveItems.length} 篇文章，{totalTags} 个标签。
+        支持按年、月、日、日期区间、标签与关键词的组合筛选。当前共有 {visibleArchiveItems.length} 篇文章，{totalTags} 个标签。
       </p>
     </div>
 
-    {archiveItems.length > 0 ? (
+    {visibleArchiveItems.length > 0 ? (
       <>
         <section class="surface filter-panel" data-archive-filter>
           <div class="filter-grid">
@@ -168,7 +180,7 @@ const fallbackGroups = archiveYears.map((year) => ({
               <span>仅看有更新记录</span>
             </label>
             <p class="muted result-summary" data-archive-summary>
-              显示 {archiveItems.length} / {archiveItems.length} 篇，按年分组。
+              显示 {visibleArchiveItems.length} / {visibleArchiveItems.length} 篇，按年分组。
             </p>
             <button class="reset-btn" type="button" data-archive-reset>
               重置全部筛选
@@ -236,6 +248,35 @@ const fallbackGroups = archiveYears.map((year) => ({
             if (!Array.isArray(allItems) || allItems.length === 0) {
               return;
             }
+
+            const STORAGE_KEY = "uent26-unlock-codes";
+            const normalizeCode = (value) => String(value ?? "").trim().toLowerCase();
+            const getStoredCodes = () => {
+              try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) {
+                  return new Set();
+                }
+                const parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed)) {
+                  return new Set();
+                }
+                return new Set(parsed.map((item) => normalizeCode(item)).filter(Boolean));
+              } catch {
+                return new Set();
+              }
+            };
+            const isUnlocked = (item, codes) => {
+              if (!item?.hidden) {
+                return true;
+              }
+              const code = normalizeCode(item.unlockCode);
+              return Boolean(code && codes.has(code));
+            };
+            const getVisibleItems = () => {
+              const codes = getStoredCodes();
+              return allItems.filter((item) => isUnlocked(item, codes));
+            };
 
             const granularitySelect = document.querySelector("[data-archive-granularity]");
             const yearSelect = document.querySelector("[data-archive-year]");
@@ -324,8 +365,8 @@ const fallbackGroups = archiveYears.map((year) => ({
               return `${year} 年 ${month} 月 ${day} 日`;
             };
 
-            const syncDateSelectCollections = () => {
-              const years = unique(allItems.map((item) => item.year)).sort((a, b) => Number(b) - Number(a));
+            const syncDateSelectCollections = (items) => {
+              const years = unique(items.map((item) => item.year)).sort((a, b) => Number(b) - Number(a));
               setSelectOptions(
                 yearSelect,
                 "year",
@@ -333,7 +374,7 @@ const fallbackGroups = archiveYears.map((year) => ({
                 "全部年份"
               );
 
-              const yearItems = allItems.filter((item) => state.year === "all" || item.year === state.year);
+              const yearItems = items.filter((item) => state.year === "all" || item.year === state.year);
               const months = unique(yearItems.map((item) => item.monthKey)).sort(compareDesc);
               setSelectOptions(
                 monthSelect,
@@ -421,8 +462,8 @@ const fallbackGroups = archiveYears.map((year) => ({
               return item.tags.some((tag) => tag.includes(keyword));
             };
 
-            const getFilteredItems = () =>
-              allItems
+            const getFilteredItems = (items) =>
+              items
                 .filter(matchDateFilter)
                 .filter((item) => (state.updatedOnly ? Boolean(item.updatedDateISO) : true))
                 .filter(matchTagFilter)
@@ -531,7 +572,7 @@ const fallbackGroups = archiveYears.map((year) => ({
               return groupNode;
             };
 
-            const updateSummary = (filteredCount, groupCount) => {
+            const updateSummary = (filteredCount, groupCount, totalCount) => {
               const tagArray = [...state.selectedTags];
               const tagInfo =
                 tagArray.length > 0
@@ -541,16 +582,17 @@ const fallbackGroups = archiveYears.map((year) => ({
                 state.startDate || state.endDate
                   ? `；范围: ${state.startDate || "..."} ~ ${state.endDate || "..."}`
                   : "";
-              summary.textContent = `显示 ${filteredCount} / ${allItems.length} 篇，按${
+              summary.textContent = `显示 ${filteredCount} / ${totalCount} 篇，按${
                 granularityLabelMap[state.granularity]
               }分组共 ${groupCount} 组${tagInfo}${rangeInfo}。`;
             };
 
             const render = () => {
-              syncDateSelectCollections();
+              const visibleItems = getVisibleItems();
+              syncDateSelectCollections(visibleItems);
               syncTagButtons();
 
-              const filtered = getFilteredItems();
+              const filtered = getFilteredItems(visibleItems);
               const groups = groupItems(filtered);
               output.replaceChildren();
 
@@ -565,7 +607,7 @@ const fallbackGroups = archiveYears.map((year) => ({
                 }
               }
 
-              updateSummary(filtered.length, groups.length);
+              updateSummary(filtered.length, groups.length, visibleItems.length);
             };
 
             const normalizeDateRange = () => {
@@ -690,6 +732,12 @@ const fallbackGroups = archiveYears.map((year) => ({
             endDateInput.value = state.endDate;
 
             bindControls();
+            window.addEventListener("unlock:changed", render);
+            window.addEventListener("storage", (event) => {
+              if (event.key === STORAGE_KEY) {
+                render();
+              }
+            });
             render();
           })();
         </script>

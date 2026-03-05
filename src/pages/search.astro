@@ -1,10 +1,11 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import { withBasePath } from "@/utils/paths";
-import { getAllPublishedPosts, getPostTags, tagToUrlSegment } from "@/utils/posts";
+import { getAllPublishedPosts, getPostTags, normalizeUnlockCode, tagToUrlSegment } from "@/utils/posts";
 
-const posts = await getAllPublishedPosts();
-const latestPosts = posts.slice(0, 12);
+const posts = await getAllPublishedPosts({ includeHidden: true });
+const visiblePosts = posts.filter((post) => !post.data.hidden);
+const latestPosts = visiblePosts.slice(0, 12);
 const tagBaseHref = withBasePath("/tags/");
 
 const searchItems = posts.map((post) => {
@@ -19,7 +20,9 @@ const searchItems = posts.map((post) => {
     dateISO: post.data.pubDate.toISOString(),
     dateLabel: post.data.pubDate.toLocaleDateString("zh-CN"),
     updatedLabel: updatedDate ? updatedDate.toLocaleDateString("zh-CN") : null,
-    timestamp: post.data.pubDate.getTime()
+    timestamp: post.data.pubDate.getTime(),
+    hidden: post.data.hidden,
+    unlockCode: normalizeUnlockCode(post.data.unlockCode)
   };
 });
 ---
@@ -129,6 +132,31 @@ const searchItems = posts.map((post) => {
           return;
         }
 
+        const STORAGE_KEY = "uent26-unlock-codes";
+        const normalizeCode = (value) => String(value ?? "").trim().toLowerCase();
+        const getStoredCodes = () => {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) {
+              return new Set();
+            }
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+              return new Set();
+            }
+            return new Set(parsed.map((item) => normalizeCode(item)).filter(Boolean));
+          } catch {
+            return new Set();
+          }
+        };
+        const isUnlocked = (item, codes) => {
+          if (!item?.hidden) {
+            return true;
+          }
+          const code = normalizeCode(item.unlockCode);
+          return Boolean(code && codes.has(code));
+        };
+
         const normalize = (value) => value.toLowerCase().replace(/\s+/g, " ").trim();
         const tokenize = (value) => normalize(value).split(" ").filter(Boolean);
         const stripMarkdown = (value) =>
@@ -163,6 +191,11 @@ const searchItems = posts.map((post) => {
             };
           })
           .sort((a, b) => b.timestamp - a.timestamp);
+
+        const getVisibleIndexed = () => {
+          const codes = getStoredCodes();
+          return indexed.filter((item) => isUnlocked(item, codes));
+        };
 
         const state = {
           query: "",
@@ -274,9 +307,10 @@ const searchItems = posts.map((post) => {
         const render = () => {
           const query = state.query.trim();
           const tokens = tokenize(query);
+          const visibleIndexed = getVisibleIndexed();
 
           const matched = tokens.length
-            ? indexed
+            ? visibleIndexed
                 .map((item) => {
                   const score = scoreByTokens(item, tokens);
                   if (score === null) {
@@ -287,7 +321,7 @@ const searchItems = posts.map((post) => {
                 .filter((item) => item !== null)
                 .sort((left, right) => right.score - left.score || right.item.timestamp - left.item.timestamp)
                 .slice(0, 60)
-            : indexed.slice(0, 12).map((item) => ({ item, score: 0 }));
+            : visibleIndexed.slice(0, 12).map((item) => ({ item, score: 0 }));
 
           output.replaceChildren();
 
@@ -357,6 +391,13 @@ const searchItems = posts.map((post) => {
           state.query = initialQuery;
           input.value = initialQuery;
         }
+
+        window.addEventListener("unlock:changed", render);
+        window.addEventListener("storage", (event) => {
+          if (event.key === STORAGE_KEY) {
+            render();
+          }
+        });
 
         render();
       })();

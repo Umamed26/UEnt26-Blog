@@ -231,6 +231,51 @@ const isNavActive = (href: string) => {
         }
       })();
     </script>
+    <script is:inline>
+      (() => {
+        const STORAGE_KEY = "uent26-unlock-codes";
+        const normalize = (value) => value.trim().toLowerCase();
+        const readCodes = () => {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) {
+              return new Set();
+            }
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+              return new Set();
+            }
+            return new Set(parsed.map((value) => normalize(String(value))).filter(Boolean));
+          } catch {
+            return new Set();
+          }
+        };
+
+        const syncUnlocked = () => {
+          const codes = readCodes();
+          const targets = document.querySelectorAll("[data-unlock-code]");
+          for (const node of targets) {
+            if (!(node instanceof HTMLElement)) {
+              continue;
+            }
+            const code = normalize(node.dataset.unlockCode || "");
+            if (code && codes.has(code)) {
+              node.removeAttribute("hidden");
+            } else {
+              node.setAttribute("hidden", "");
+            }
+          }
+        };
+
+        syncUnlocked();
+        window.addEventListener("unlock:changed", syncUnlocked);
+        window.addEventListener("storage", (event) => {
+          if (event.key === STORAGE_KEY) {
+            syncUnlocked();
+          }
+        });
+      })();
+    </script>
     <AnalyticsScript />
     <MotionController />
   </body>

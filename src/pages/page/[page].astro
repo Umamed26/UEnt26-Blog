@@ -13,7 +13,7 @@ type Props = {
 };
 
 export async function getStaticPaths() {
-  const posts = await getAllPublishedPosts();
+  const posts = await getAllPublishedPosts({ includeHidden: true });
   const { feed } = splitFeaturedAndFeedPosts(posts, siteConfig.featuredCount);
   const totalPages = Math.ceil(feed.length / siteConfig.postsPerPage);
 

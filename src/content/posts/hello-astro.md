@@ -1,5 +1,5 @@
 ---
-title: "这是个博客。"
+title: "这是个博客"
 description: "目前还是占位符的描述。"
 pubDate: 2026-03-04
 tags:

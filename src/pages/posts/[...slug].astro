@@ -10,6 +10,7 @@ import {
   getAllPublishedPosts,
   getPostTags,
   getRelatedPosts,
+  normalizeUnlockCode,
   tagToUrlSegment,
   type PostEntry
 } from "@/utils/posts";
@@ -19,7 +20,7 @@ type Props = {
 };
 
 export async function getStaticPaths() {
-  const posts = await getAllPublishedPosts();
+  const posts = await getAllPublishedPosts({ includeHidden: true });
   return posts.map((post) => ({
     params: { slug: post.slug },
     props: { post }
@@ -30,10 +31,13 @@ const { post } = Astro.props as Props;
 const { Content, headings } = await render(post);
 const toc = post.data.toc ? headings.filter((item) => item.depth >= 2 && item.depth <= 3) : [];
 const tags = getPostTags(post);
-const allPosts = await getAllPublishedPosts();
+const allPosts = await getAllPublishedPosts({ includeHidden: true });
 const relatedPosts = getRelatedPosts(allPosts, post, 4);
 const canonicalPath = `/posts/${post.slug}/`;
 const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.data.cover?.src;
+const isHidden = post.data.hidden;
+const unlockCode = normalizeUnlockCode(post.data.unlockCode);
+const revealCode = post.data.revealCode;
 ---
 
 <BaseLayout
@@ -79,53 +83,184 @@ const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.da
       )}
     </section>
 
-    <div class="article-layout" data-reveal style="--reveal-delay: 120ms;">
-      <CodeBlockWrapper>
-        <Content />
-      </CodeBlockWrapper>
-      <div class="toc-wrap">
-        <TOC headings={toc} />
-      </div>
-    </div>
-
-    {relatedPosts.length > 0 && (
-      <section class="stack related-section" data-reveal style="--reveal-delay: 160ms;">
+    {isHidden && (
+      <section class="surface lock-panel" data-lock-panel data-reveal style="--reveal-delay: 120ms;">
         <div>
-          <p class="section-kicker">Keep Reading</p>
-          <h2 class="section-title">相关文章</h2>
+          <p class="section-kicker">Locked</p>
+          <h2 class="section-title">文章已锁定</h2>
+          <p class="muted">前往控制台输入解锁码后即可查看全文。</p>
         </div>
-        <div class="related-grid">
-          {relatedPosts.map(({ post: relatedPost, sharedTags }) => (
-            <article class="surface related-card">
-              <p class="related-meta">
-                <time datetime={relatedPost.data.pubDate.toISOString()}>
-                  {relatedPost.data.pubDate.toLocaleDateString("zh-CN")}
-                </time>
-                {relatedPost.data.updatedDate && (
-                  <span>更新于 {relatedPost.data.updatedDate.toLocaleDateString("zh-CN")}</span>
-                )}
-              </p>
-              <h3 class="related-title">
-                <a href={withBasePath(`/posts/${relatedPost.slug}/`)}>{relatedPost.data.title}</a>
-              </h3>
-              <p class="muted related-desc">{relatedPost.data.description}</p>
-              {sharedTags.length > 0 && (
-                <div class="related-tags" aria-label="共同标签">
-                  {sharedTags.map((tag) => (
-                    <TagPill tag={tag} href={withBasePath(`/tags/${tagToUrlSegment(tag)}/`)} />
-                  ))}
-                </div>
-              )}
-            </article>
-          ))}
+        <div class="lock-actions">
+          <a class="lock-link" href={withBasePath("/console/")}>前往控制台解锁</a>
+          <span class="muted">
+            示例：<code>unlock XXXX</code>
+          </span>
         </div>
       </section>
     )}
 
-    <div data-reveal style="--reveal-delay: 200ms;">
+    <div class="lock-content" data-lock-content data-locked={isHidden ? "true" : "false"}>
+      <div class="article-layout" data-reveal style="--reveal-delay: 160ms;">
+        <CodeBlockWrapper>
+          <Content />
+        </CodeBlockWrapper>
+        <div class="toc-wrap">
+          <TOC headings={toc} />
+        </div>
+      </div>
+
+      {revealCode && (
+        <section class="surface reveal-panel" data-reveal style="--reveal-delay: 190ms;">
+          <div>
+            <p class="section-kicker">Unlock Code</p>
+            <h2 class="section-title">解锁码</h2>
+            <p class="muted">在控制台输入此代码即可解锁隐藏文章。</p>
+          </div>
+          <div class="reveal-code-row">
+            <code data-reveal-code>{revealCode}</code>
+            <button class="reveal-copy" type="button" data-reveal-copy>复制</button>
+          </div>
+        </section>
+      )}
+
+      {relatedPosts.length > 0 && (
+        <section class="stack related-section" data-reveal style="--reveal-delay: 220ms;">
+          <div>
+            <p class="section-kicker">Keep Reading</p>
+            <h2 class="section-title">相关文章</h2>
+          </div>
+          <div class="related-grid">
+          {relatedPosts.map(({ post: relatedPost }) => {
+            const relatedTags = getPostTags(relatedPost);
+            const relatedUnlockCode = relatedPost.data.hidden
+              ? normalizeUnlockCode(relatedPost.data.unlockCode)
+              : undefined;
+            return (
+              <article
+                class="surface related-card"
+                data-unlock-code={relatedUnlockCode}
+                hidden={relatedPost.data.hidden}
+              >
+              <p class="related-meta">
+                <time datetime={relatedPost.data.pubDate.toISOString()}>
+                  {relatedPost.data.pubDate.toLocaleDateString("zh-CN")}
+                </time>
+                  {relatedPost.data.updatedDate && (
+                    <span>更新于 {relatedPost.data.updatedDate.toLocaleDateString("zh-CN")}</span>
+                  )}
+                </p>
+              <h3 class="related-title">
+                <a href={withBasePath(`/posts/${relatedPost.slug}/`)}>{relatedPost.data.title}</a>
+              </h3>
+              <p class="muted related-desc">{relatedPost.data.description}</p>
+              {relatedTags.length > 0 && (
+                <div class="related-tags" aria-label="文章标签">
+                  {relatedTags.map((tag) => (
+                    <TagPill tag={tag} href={withBasePath(`/tags/${tagToUrlSegment(tag)}/`)} />
+                  ))}
+                </div>
+              )}
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    )}
+
+    <div data-reveal style="--reveal-delay: 260ms;">
       <GiscusComments />
     </div>
+  </div>
   </article>
+
+  <script is:inline define:vars={{ unlockCode, isHidden }}>
+    (() => {
+      const STORAGE_KEY = "uent26-unlock-codes";
+      const normalize = (value) => String(value ?? "").trim().toLowerCase();
+      const getStoredCodes = () => {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) {
+            return new Set();
+          }
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) {
+            return new Set();
+          }
+          return new Set(parsed.map((item) => normalize(item)).filter(Boolean));
+        } catch {
+          return new Set();
+        }
+      };
+
+      const lockContent = document.querySelector("[data-lock-content]");
+      const lockPanel = document.querySelector("[data-lock-panel]");
+
+      const applyLockState = () => {
+        if (!isHidden) {
+          if (lockContent instanceof HTMLElement) {
+            lockContent.setAttribute("data-locked", "false");
+            lockContent.setAttribute("aria-hidden", "false");
+          }
+          return;
+        }
+
+        const codes = getStoredCodes();
+        const normalizedCode = normalize(unlockCode);
+        const unlocked = Boolean(normalizedCode && codes.has(normalizedCode));
+
+        if (lockContent instanceof HTMLElement) {
+          lockContent.setAttribute("data-locked", unlocked ? "false" : "true");
+          lockContent.setAttribute("aria-hidden", unlocked ? "false" : "true");
+        }
+
+        if (lockPanel instanceof HTMLElement) {
+          if (unlocked) {
+            lockPanel.setAttribute("hidden", "");
+          } else {
+            lockPanel.removeAttribute("hidden");
+          }
+        }
+      };
+
+      applyLockState();
+
+      if (isHidden) {
+        window.addEventListener("unlock:changed", applyLockState);
+        window.addEventListener("storage", (event) => {
+          if (event.key === STORAGE_KEY) {
+            applyLockState();
+          }
+        });
+      }
+
+      const copyButton = document.querySelector("[data-reveal-copy]");
+      const codeNode = document.querySelector("[data-reveal-code]");
+      if (copyButton instanceof HTMLButtonElement && codeNode instanceof HTMLElement) {
+        const defaultLabel = copyButton.textContent || "复制";
+        copyButton.addEventListener("click", async () => {
+          const codeText = codeNode.textContent?.trim() || "";
+          if (!codeText) {
+            return;
+          }
+          try {
+            await navigator.clipboard.writeText(codeText);
+            copyButton.textContent = "已复制";
+            copyButton.disabled = true;
+            setTimeout(() => {
+              copyButton.disabled = false;
+              copyButton.textContent = defaultLabel;
+            }, 1400);
+          } catch {
+            copyButton.textContent = "复制失败";
+            setTimeout(() => {
+              copyButton.textContent = defaultLabel;
+            }, 1400);
+          }
+        });
+      }
+    })();
+  </script>
 </BaseLayout>
 
 <style>
@@ -180,6 +315,90 @@ const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.da
     display: grid;
     gap: 1.2rem;
     align-items: start;
+  }
+
+  .lock-panel {
+    padding: 1rem;
+    border-radius: var(--radius-lg);
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .lock-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .lock-link {
+    border: 1px solid rgba(159, 57, 34, 0.34);
+    border-radius: 999px;
+    padding: 0.3rem 0.78rem;
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.2), rgba(196, 82, 55, 0.1));
+    color: var(--accent-strong);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .lock-link:hover {
+    transform: translateY(-1px);
+    border-color: rgba(159, 57, 34, 0.5);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.28), rgba(196, 82, 55, 0.16));
+    color: var(--accent-strong);
+  }
+
+  .lock-content[data-locked="true"] {
+    display: none;
+  }
+
+  .reveal-panel {
+    padding: 1rem;
+    border-radius: var(--radius-lg);
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .reveal-code-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .reveal-code-row code {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.9rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 8px;
+    background: var(--inline-code-bg);
+    color: var(--inline-code-text);
+  }
+
+  .reveal-copy {
+    border: 1px solid rgba(31, 120, 117, 0.34);
+    border-radius: 999px;
+    padding: 0.26rem 0.72rem;
+    background: rgba(31, 120, 117, 0.1);
+    color: var(--accent-cyan);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .reveal-copy:hover {
+    transform: translateY(-1px);
+    border-color: rgba(31, 120, 117, 0.5);
+    background: rgba(31, 120, 117, 0.18);
   }
 
   .related-section {

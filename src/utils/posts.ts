@@ -24,6 +24,7 @@ const normalizeDate = (date: Date) => new Date(date).getTime();
 export const normalizeTag = (tag: string) => tag.trim().toLowerCase();
 export const tagToParam = (tag: string) => normalizeTag(tag);
 export const tagToUrlSegment = (tag: string) => encodeURIComponent(normalizeTag(tag));
+export const normalizeUnlockCode = (code?: string) => (code ?? "").trim().toLowerCase();
 
 export const getPostTags = (post: PostEntry): string[] =>
   (post.data.tags ?? []).map(normalizeTag).filter(Boolean);
@@ -55,9 +56,19 @@ const byPinnedThenRecent = (a: PostEntry, b: PostEntry) => {
   return byRecent(a, b);
 };
 
-export const getAllPublishedPosts = async (): Promise<PostEntry[]> => {
+export type GetAllPostsOptions = {
+  includeHidden?: boolean;
+};
+
+export const getAllPublishedPosts = async (
+  options: GetAllPostsOptions = {}
+): Promise<PostEntry[]> => {
+  const { includeHidden = false } = options;
   const posts = await getCollection("posts");
-  return posts.filter(isPostPublished).sort(byRecent);
+  return posts
+    .filter(isPostPublished)
+    .filter((post) => (includeHidden ? true : !post.data.hidden))
+    .sort(byRecent);
 };
 
 export const splitFeaturedAndFeedPosts = (

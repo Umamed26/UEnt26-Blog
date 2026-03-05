@@ -1,6 +1,6 @@
 ---
 import type { PostEntry } from "@/utils/posts";
-import { getPostTags, tagToUrlSegment } from "@/utils/posts";
+import { getPostTags, normalizeUnlockCode, tagToUrlSegment } from "@/utils/posts";
 import { withBasePath } from "@/utils/paths";
 import TagPill from "@/components/TagPill.astro";
 
@@ -13,9 +13,14 @@ const { post, variant = "default" } = Astro.props as Props;
 const tags = getPostTags(post);
 const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.data.cover?.src;
 const postHref = withBasePath(`/posts/${post.slug}/`);
+const unlockCode = post.data.hidden ? normalizeUnlockCode(post.data.unlockCode) : undefined;
 ---
 
-<article class:list={["surface card", variant]}>
+<article
+  class:list={["surface card", variant]}
+  data-unlock-code={unlockCode}
+  hidden={post.data.hidden}
+>
   {coverSrc ? (
     <img class="cover" src={coverSrc} alt={post.data.title} loading="lazy" decoding="async" />
   ) : (

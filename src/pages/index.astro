@@ -12,7 +12,7 @@ import {
   tagToUrlSegment
 } from "@/utils/posts";
 
-const allPosts = await getAllPublishedPosts();
+const allPosts = await getAllPublishedPosts({ includeHidden: true });
 const { featured, feed } = splitFeaturedAndFeedPosts(allPosts, siteConfig.featuredCount);
 const totalPages = Math.max(1, Math.ceil(feed.length / siteConfig.postsPerPage));
 const pagePosts = feed.slice(0, siteConfig.postsPerPage);

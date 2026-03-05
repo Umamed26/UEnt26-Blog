@@ -1,0 +1,431 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="管理员">
+  <section class="surface admin-gate" data-admin-gate data-reveal>
+    <div class="admin-gate-head">
+      <p class="section-kicker">Admin Access</p>
+      <h1 class="page-title">管理员入口</h1>
+      <p class="muted">请输入管理员密码以访问后台操作。</p>
+    </div>
+    <form class="admin-form" data-admin-form>
+      <label class="field">
+        <span>管理员密码</span>
+        <input type="password" autocomplete="current-password" data-admin-input />
+      </label>
+      <div class="admin-form-actions">
+        <button class="primary-btn" type="submit">进入</button>
+        <p class="muted" data-admin-error></p>
+      </div>
+    </form>
+  </section>
+
+  <section class="stack admin-page" data-admin-page hidden>
+    <header class="admin-head" data-reveal>
+      <p class="section-kicker">Admin Panel</p>
+      <h1 class="page-title">管理员页面</h1>
+      <p class="muted">用于管理本地解锁状态。清除后将隐藏所有已解锁文章。</p>
+    </header>
+
+    <section class="surface admin-card" data-reveal style="--reveal-delay: 60ms;">
+      <div class="admin-row">
+        <div>
+          <h2 class="section-title">解锁状态</h2>
+          <p class="muted" data-admin-status>读取中...</p>
+        </div>
+        <div class="admin-actions">
+          <button class="danger-btn" type="button" data-admin-clear>清除所有解锁进度</button>
+          <button class="ghost-btn" type="button" data-admin-logout>退出管理员</button>
+        </div>
+      </div>
+      <div class="admin-list" data-admin-list aria-live="polite"></div>
+    </section>
+
+    <section class="surface admin-card" data-reveal style="--reveal-delay: 120ms;">
+      <h2 class="section-title">说明</h2>
+      <ul class="admin-notes">
+        <li>解锁状态存储在浏览器本地，不会同步到其他设备。</li>
+        <li>清除后需要重新在控制台输入解锁码。</li>
+        <li>管理员密码仅用于本地访问控制，源码中可见。</li>
+      </ul>
+    </section>
+  </section>
+
+  <script is:inline>
+    (() => {
+      const ADMIN_PASSWORD = "uent26-admin";
+      const ADMIN_AUTH_KEY = "uent26-admin-auth";
+      const UNLOCK_KEY = "uent26-unlock-codes";
+
+      const gate = document.querySelector("[data-admin-gate]");
+      const page = document.querySelector("[data-admin-page]");
+      const form = document.querySelector("[data-admin-form]");
+      const input = document.querySelector("[data-admin-input]");
+      const error = document.querySelector("[data-admin-error]");
+      const status = document.querySelector("[data-admin-status]");
+      const list = document.querySelector("[data-admin-list]");
+      const clearButton = document.querySelector("[data-admin-clear]");
+      const logoutButton = document.querySelector("[data-admin-logout]");
+
+      if (
+        !(gate instanceof HTMLElement) ||
+        !(page instanceof HTMLElement) ||
+        !(form instanceof HTMLFormElement) ||
+        !(input instanceof HTMLInputElement) ||
+        !(error instanceof HTMLElement) ||
+        !(status instanceof HTMLElement) ||
+        !(list instanceof HTMLElement) ||
+        !(clearButton instanceof HTMLButtonElement) ||
+        !(logoutButton instanceof HTMLButtonElement)
+      ) {
+        return;
+      }
+
+      const normalize = (value) => String(value ?? "").trim();
+      const isAuthed = () => {
+        try {
+          return localStorage.getItem(ADMIN_AUTH_KEY) === "true";
+        } catch {
+          return false;
+        }
+      };
+
+      const setAuthed = (value) => {
+        try {
+          if (value) {
+            localStorage.setItem(ADMIN_AUTH_KEY, "true");
+          } else {
+            localStorage.removeItem(ADMIN_AUTH_KEY);
+          }
+        } catch {}
+      };
+
+      const readCodes = () => {
+        try {
+          const raw = localStorage.getItem(UNLOCK_KEY);
+          if (!raw) {
+            return [];
+          }
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) {
+            return [];
+          }
+          return parsed.map((item) => normalize(item)).filter(Boolean);
+        } catch {
+          return [];
+        }
+      };
+
+      const render = () => {
+        const codes = readCodes();
+        status.textContent = codes.length
+          ? `当前已解锁 ${codes.length} 个解锁码。`
+          : "当前没有任何解锁记录。";
+
+        list.replaceChildren();
+        if (codes.length === 0) {
+          const empty = document.createElement("p");
+          empty.className = "muted";
+          empty.textContent = "暂无解锁码。";
+          list.append(empty);
+          return;
+        }
+
+        const ul = document.createElement("ul");
+        ul.className = "code-list";
+        for (const code of codes) {
+          const li = document.createElement("li");
+          const chip = document.createElement("code");
+          chip.textContent = code;
+          li.append(chip);
+          ul.append(li);
+        }
+        list.append(ul);
+      };
+
+      const showAdmin = () => {
+        gate.setAttribute("hidden", "");
+        page.removeAttribute("hidden");
+        render();
+      };
+
+      const showGate = () => {
+        page.setAttribute("hidden", "");
+        gate.removeAttribute("hidden");
+        input.value = "";
+      };
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const value = normalize(input.value);
+        if (!value) {
+          error.textContent = "请输入管理员密码。";
+          return;
+        }
+        if (value !== ADMIN_PASSWORD) {
+          error.textContent = "密码错误。";
+          return;
+        }
+        error.textContent = "";
+        setAuthed(true);
+        showAdmin();
+      });
+
+      clearButton.addEventListener("click", () => {
+        try {
+          localStorage.removeItem(UNLOCK_KEY);
+        } catch {}
+        render();
+        window.dispatchEvent(new CustomEvent("unlock:changed"));
+      });
+
+      logoutButton.addEventListener("click", () => {
+        setAuthed(false);
+        showGate();
+      });
+
+      window.addEventListener("storage", (event) => {
+        if (event.key === UNLOCK_KEY && !page.hasAttribute("hidden")) {
+          render();
+        }
+      });
+
+      if (isAuthed()) {
+        showAdmin();
+      } else {
+        showGate();
+      }
+    })();
+  </script>
+</BaseLayout>
+
+<style>
+  .admin-gate {
+    padding: 1rem;
+    border-radius: var(--radius-lg);
+    display: grid;
+    gap: 1rem;
+  }
+
+  .admin-gate-head {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .admin-form {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .field {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .field span {
+    color: var(--text-soft);
+    font-size: 0.74rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .field input {
+    width: 100%;
+    min-height: 2.4rem;
+    border-radius: 11px;
+    border: 1px solid rgba(218, 205, 184, 0.95);
+    background: rgba(255, 255, 255, 0.78);
+    color: var(--text);
+    font: inherit;
+    padding: 0.36rem 0.62rem;
+  }
+
+  .field input:focus-visible {
+    border-color: rgba(31, 120, 117, 0.52);
+  }
+
+  .admin-form-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .primary-btn {
+    border-radius: 999px;
+    border: 1px solid rgba(31, 120, 117, 0.34);
+    background: rgba(31, 120, 117, 0.1);
+    color: var(--accent-cyan);
+    min-height: 2.2rem;
+    padding: 0.28rem 0.9rem;
+    font-size: 0.86rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .primary-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(31, 120, 117, 0.52);
+    background: rgba(31, 120, 117, 0.18);
+  }
+
+  .admin-page {
+    gap: 1.2rem;
+  }
+
+  .admin-head {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .admin-card {
+    padding: 1rem;
+    border-radius: var(--radius-lg);
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .admin-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+
+  .admin-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .danger-btn {
+    border-radius: 999px;
+    border: 1px solid rgba(159, 57, 34, 0.4);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.22), rgba(196, 82, 55, 0.1));
+    color: var(--accent-strong);
+    min-height: 2.2rem;
+    padding: 0.28rem 0.9rem;
+    font-size: 0.86rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .danger-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(159, 57, 34, 0.56);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.3), rgba(196, 82, 55, 0.16));
+  }
+
+  .ghost-btn {
+    border-radius: 999px;
+    border: 1px solid rgba(31, 120, 117, 0.3);
+    background: transparent;
+    color: var(--accent-cyan);
+    min-height: 2.2rem;
+    padding: 0.28rem 0.9rem;
+    font-size: 0.84rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .ghost-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(31, 120, 117, 0.46);
+    background: rgba(31, 120, 117, 0.08);
+  }
+
+  .admin-list {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .code-list {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    list-style: none;
+  }
+
+  .code-list code {
+    font-family: "IBM Plex Mono", monospace;
+    padding: 0.18rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(31, 120, 117, 0.12);
+    color: var(--accent-cyan);
+    border: 1px solid rgba(31, 120, 117, 0.28);
+    font-size: 0.78rem;
+  }
+
+  .admin-notes {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: var(--text-soft);
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  :global(html[data-theme="dark"]) .field input {
+    border-color: rgba(45, 59, 75, 0.95);
+    background: rgba(16, 24, 34, 0.84);
+    color: var(--text);
+  }
+
+  :global(html[data-theme="dark"]) .field input:focus-visible {
+    border-color: rgba(86, 198, 194, 0.56);
+  }
+
+  :global(html[data-theme="dark"]) .primary-btn {
+    border-color: rgba(86, 198, 194, 0.4);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .primary-btn:hover {
+    border-color: rgba(86, 198, 194, 0.56);
+    background: rgba(86, 198, 194, 0.2);
+  }
+
+  :global(html[data-theme="dark"]) .danger-btn {
+    border-color: rgba(241, 141, 85, 0.44);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.24), rgba(241, 141, 85, 0.1));
+    color: var(--accent-strong);
+  }
+
+  :global(html[data-theme="dark"]) .danger-btn:hover {
+    border-color: rgba(241, 141, 85, 0.62);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.32), rgba(241, 141, 85, 0.18));
+  }
+
+  :global(html[data-theme="dark"]) .ghost-btn {
+    border-color: rgba(86, 198, 194, 0.34);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .ghost-btn:hover {
+    border-color: rgba(86, 198, 194, 0.52);
+    background: rgba(86, 198, 194, 0.14);
+  }
+
+  :global(html[data-theme="dark"]) .code-list code {
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
+    border-color: rgba(86, 198, 194, 0.34);
+  }
+</style>

@@ -3,7 +3,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import TagPill from "@/components/TagPill.astro";
 import { getAllPublishedPosts, getTagsWithCount, tagToUrlSegment } from "@/utils/posts";
 
-const posts = await getAllPublishedPosts();
+const posts = await getAllPublishedPosts({ includeHidden: true });
 const tags = getTagsWithCount(posts);
 ---
 

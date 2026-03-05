@@ -1,9 +1,9 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { getAllPublishedPosts, getPostTags } from "@/utils/posts";
+import { getAllPublishedPosts, getPostTags, normalizeUnlockCode } from "@/utils/posts";
 import { withBasePath } from "@/utils/paths";
 
-const posts = await getAllPublishedPosts();
+const posts = await getAllPublishedPosts({ includeHidden: true });
 const consolePosts = posts.map((post) => {
   const updatedDate = post.data.updatedDate;
   return {
@@ -16,9 +16,12 @@ const consolePosts = posts.map((post) => {
     updatedLabel: updatedDate ? updatedDate.toLocaleDateString("zh-CN") : null,
     timestamp: post.data.pubDate.getTime(),
     tags: getPostTags(post),
-    body: post.body
+    body: post.body,
+    hidden: post.data.hidden,
+    unlockCode: normalizeUnlockCode(post.data.unlockCode)
   };
 });
+const visibleConsolePosts = consolePosts.filter((post) => !post.hidden);
 ---
 
 <BaseLayout title="控制台">
@@ -74,7 +77,7 @@ const consolePosts = posts.map((post) => {
       <div class="surface noscript-fallback">
         <p class="muted">已关闭 JavaScript，以下展示静态文章列表：</p>
         <ul>
-          {consolePosts.map((post) => (
+          {visibleConsolePosts.map((post) => (
             <li>
               <a href={post.href}>{post.title}</a>
             </li>
@@ -114,12 +117,46 @@ const consolePosts = posts.map((post) => {
           return;
         }
 
+        const STORAGE_KEY = "uent26-unlock-codes";
+        const normalizeCode = (value) => String(value ?? "").trim().toLowerCase();
+        const getStoredCodes = () => {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) {
+              return new Set();
+            }
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+              return new Set();
+            }
+            return new Set(parsed.map((item) => normalizeCode(item)).filter(Boolean));
+          } catch {
+            return new Set();
+          }
+        };
+        const setStoredCodes = (codes) => {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify([...codes]));
+          } catch {}
+        };
+
+        const isUnlocked = (post, codes) => {
+          if (!post?.hidden) {
+            return true;
+          }
+          const code = normalizeCode(post.unlockCode);
+          return Boolean(code && codes.has(code));
+        };
+
+        let unlockedCodes = getStoredCodes();
+        let visiblePosts = allPosts.filter((post) => isUnlocked(post, unlockedCodes));
+
         const PAGE_SIZE = 5;
         const state = {
           page: 1,
           keyword: "",
           tag: "",
-          filtered: allPosts
+          filtered: visiblePosts
         };
 
         const clampPage = () => {
@@ -171,7 +208,7 @@ const consolePosts = posts.map((post) => {
           const activeKeyword = state.keyword ? `关键词: "${state.keyword}"` : "";
           const activeTag = state.tag ? `标签: #${state.tag}` : "";
           const filters = [activeKeyword, activeTag].filter(Boolean).join(" | ");
-          status.textContent = `当前第 ${state.page}/${totalPages} 页，每页 ${PAGE_SIZE} 条。匹配 ${state.filtered.length}/${allPosts.length} 篇${
+          status.textContent = `当前第 ${state.page}/${totalPages} 页，每页 ${PAGE_SIZE} 条。匹配 ${state.filtered.length}/${visiblePosts.length} 篇${
             filters ? `（${filters}）` : ""
           }。`;
         };
@@ -180,7 +217,7 @@ const consolePosts = posts.map((post) => {
           const keyword = state.keyword.trim().toLowerCase();
           const tag = state.tag.trim().toLowerCase();
 
-          state.filtered = allPosts.filter((post) => {
+          state.filtered = visiblePosts.filter((post) => {
             if (tag && !post.tags.includes(tag)) {
               return false;
             }
@@ -197,6 +234,42 @@ const consolePosts = posts.map((post) => {
 
           clampPage();
           updateStatus();
+        };
+
+        const refreshVisiblePosts = () => {
+          unlockedCodes = getStoredCodes();
+          visiblePosts = allPosts.filter((post) => isUnlocked(post, unlockedCodes));
+          applyFilters();
+        };
+
+        const attemptUnlock = (rawInput) => {
+          const code = normalizeCode(rawInput);
+          if (!code) {
+            appendLine("用法: unlock <解锁码>", "error");
+            return true;
+          }
+
+          const matches = allPosts.filter(
+            (post) => post.hidden && normalizeCode(post.unlockCode) === code
+          );
+
+          if (matches.length === 0) {
+            appendLine("解锁码无效。", "error");
+            return true;
+          }
+
+          if (unlockedCodes.has(code)) {
+            appendLine("该解锁码已生效。", "meta");
+            return true;
+          }
+
+          unlockedCodes.add(code);
+          setStoredCodes(unlockedCodes);
+          refreshVisiblePosts();
+          appendLine(`解锁成功，已解锁 ${matches.length} 篇文章。`, "meta");
+          window.dispatchEvent(new CustomEvent("unlock:changed"));
+          printList();
+          return true;
         };
 
         const printList = () => {
@@ -241,9 +314,6 @@ const consolePosts = posts.map((post) => {
           } else {
             const slug = arg.toLowerCase().trim();
             target = state.filtered.find((post) => post.slug.toLowerCase() === slug) ?? null;
-            if (!target) {
-              target = allPosts.find((post) => post.slug.toLowerCase() === slug) ?? null;
-            }
           }
 
           return target;
@@ -316,6 +386,7 @@ const consolePosts = posts.map((post) => {
           appendLine("cat/view <序号|slug>          read 命令别名", "meta");
           appendLine("search <关键词>               标题/摘要/标签搜索", "meta");
           appendLine("tag <标签>                    按标签过滤，如 tag astro", "meta");
+          appendLine("unlock <解锁码>               解锁隐藏文章（直接输入解锁码也可）", "meta");
           appendLine("count                         查看当前匹配统计", "meta");
           appendLine("reset                         清空筛选并回到第一页", "meta");
           appendLine("clear                         清空屏幕输出", "meta");
@@ -404,6 +475,11 @@ const consolePosts = posts.map((post) => {
             return;
           }
 
+          if (cmd === "unlock") {
+            attemptUnlock(arg);
+            return;
+          }
+
           if (cmd === "count") {
             updateStatus();
             appendLine(status.textContent || "暂无统计。", "meta");
@@ -427,6 +503,10 @@ const consolePosts = posts.map((post) => {
             return;
           }
 
+          if (attemptUnlock(commandText)) {
+            return;
+          }
+
           appendLine(`未知命令: ${escapeText(commandText)}。输入 help 查看命令。`, "error");
         };
 
@@ -447,8 +527,18 @@ const consolePosts = posts.map((post) => {
           });
         }
 
+        window.addEventListener("storage", (event) => {
+          if (event.key === STORAGE_KEY) {
+            refreshVisiblePosts();
+            printList();
+          }
+        });
+
         applyFilters();
-        appendLine(`Console ready. 已载入 ${allPosts.length} 篇文章。`, "meta");
+        appendLine(
+          `Console ready. 已载入 ${allPosts.length} 篇文章，当前可见 ${visiblePosts.length} 篇。`,
+          "meta"
+        );
         appendLine("输入 help 查看命令，输入 list 浏览第一页。", "meta");
         printList();
         input.focus();
