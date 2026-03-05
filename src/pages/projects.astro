@@ -9,8 +9,8 @@ type ProjectLink = {
 
 type ProjectItem = {
   name: string;
-  status: "进行中" | "维护中" | "规划中";
-  tone: "active" | "maintain" | "plan";
+  status: "进行中" | "维护中" | "规划中" | "已停更";
+  tone: "active" | "maintain" | "plan" | "inactive";
   summary: string;
   stack: string[];
   highlights: string[];
@@ -59,6 +59,17 @@ const projects: ProjectItem[] = [
     highlights: ["不知道哇"],
     links: [
       { label: "占位符", href: withBasePath("/now/") }
+    ]
+  },
+  {
+    name: "UnnamedOS",
+    status: "已停更",
+    tone: "inactive",
+    summary: "一个类似于Hacknet的网页游戏",
+    stack: ["HTML", "CSS", "JavaScript"],
+    highlights: ["无"],
+    links: [
+      { label: "占位符", href: "127.0.0.1" }
     ]
   }
 ];
@@ -186,6 +197,12 @@ const projects: ProjectItem[] = [
     background: rgba(106, 97, 86, 0.09);
   }
 
+  .status-inactive {
+    color: var(--text-muted);
+    border-color: rgba(106, 97, 86, 0.35);
+    background: rgba(106, 97, 86, 0.09);
+  }
+
   .project-summary {
     margin: 0;
     line-height: 1.55;
@@ -278,6 +295,12 @@ const projects: ProjectItem[] = [
     border-color: rgba(100, 116, 139, 0.5);
     background: rgba(100, 116, 139, 0.2);
     color: #b7c4d8;
+  }
+
+  :global(html[data-theme="dark"]) .status-inactive {
+    border-color: rgba(100, 116, 139, 0.5);
+    background: rgba(100, 116, 139, 0.2);
+    color: #6c758d;
   }
 
   :global(html[data-theme="dark"]) .chip,
