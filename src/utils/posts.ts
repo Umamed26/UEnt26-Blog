@@ -13,6 +13,12 @@ export type FeaturedSplit = {
   feed: PostEntry[];
 };
 
+export type RelatedPost = {
+  post: PostEntry;
+  sharedTags: string[];
+  score: number;
+};
+
 const normalizeDate = (date: Date) => new Date(date).getTime();
 
 export const normalizeTag = (tag: string) => tag.trim().toLowerCase();
@@ -90,6 +96,39 @@ export const splitFeaturedAndFeedPosts = (
 
   const feed = posts.filter((post) => !picked.has(post.slug));
   return { featured, feed };
+};
+
+export const getRelatedPosts = (
+  posts: PostEntry[],
+  target: PostEntry,
+  limit = 4
+): RelatedPost[] => {
+  if (limit <= 0 || posts.length <= 1) {
+    return [];
+  }
+
+  const targetTags = new Set(getPostTags(target));
+  const targetSlug = target.slug;
+
+  const related = posts
+    .filter((post) => post.slug !== targetSlug)
+    .map((post) => {
+      const tags = getPostTags(post);
+      const sharedTags = tags.filter((tag) => targetTags.has(tag));
+      const overlap = sharedTags.length;
+      const unionSize = new Set([...targetTags, ...tags]).size || 1;
+      const similarity = overlap / unionSize;
+      const recencyBoost = normalizeDate(post.data.pubDate) / 1_000_000_000_000;
+      const score = overlap > 0 ? overlap * 100 + similarity * 10 + recencyBoost : recencyBoost;
+
+      return { post, sharedTags, score };
+    })
+    .sort((left, right) => right.score - left.score || byRecent(left.post, right.post));
+
+  const withSharedTags = related.filter((item) => item.sharedTags.length > 0);
+  const withoutSharedTags = related.filter((item) => item.sharedTags.length === 0);
+
+  return [...withSharedTags, ...withoutSharedTags].slice(0, limit);
 };
 
 export const getPostBySlug = async (slug: string): Promise<PostEntry | undefined> => {

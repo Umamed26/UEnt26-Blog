@@ -1,0 +1,615 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { withBasePath } from "@/utils/paths";
+import { getAllPublishedPosts, getPostTags, tagToUrlSegment } from "@/utils/posts";
+
+const posts = await getAllPublishedPosts();
+const latestPosts = posts.slice(0, 12);
+const tagBaseHref = withBasePath("/tags/");
+
+const searchItems = posts.map((post) => {
+  const updatedDate = post.data.updatedDate;
+  return {
+    slug: post.slug,
+    href: withBasePath(`/posts/${post.slug}/`),
+    title: post.data.title,
+    description: post.data.description,
+    body: post.body,
+    tags: getPostTags(post),
+    dateISO: post.data.pubDate.toISOString(),
+    dateLabel: post.data.pubDate.toLocaleDateString("zh-CN"),
+    updatedLabel: updatedDate ? updatedDate.toLocaleDateString("zh-CN") : null,
+    timestamp: post.data.pubDate.getTime()
+  };
+});
+---
+
+<BaseLayout title="搜索">
+  <section class="stack search-page" data-reveal>
+    <header class="search-head">
+      <div>
+        <p class="section-kicker">Search Hub</p>
+        <h1 class="page-title">全站搜索</h1>
+      </div>
+      <p class="muted">
+        搜索标题、摘要、标签与正文。当前索引 {posts.length} 篇文章，支持空格分词组合检索。
+      </p>
+    </header>
+
+    <section class="surface search-panel" data-reveal style="--reveal-delay: 60ms;">
+      <div class="search-row">
+        <label class="search-label" for="search-input">关键词</label>
+        <input
+          id="search-input"
+          type="search"
+          placeholder="例如: astro 性能 优化"
+          autocomplete="off"
+          spellcheck="false"
+          data-search-input
+        />
+        <button type="button" class="search-clear" data-search-clear>清空</button>
+      </div>
+
+      <div class="search-actions">
+        <label class="search-toggle">
+          <input type="checkbox" checked data-search-body />
+          <span>包含正文匹配</span>
+        </label>
+        <p class="muted search-tip">快捷键: 按 <kbd>/</kbd> 可快速聚焦搜索框</p>
+      </div>
+
+      <p class="muted search-summary" data-search-summary>
+        输入关键词开始搜索。当前展示最新 {latestPosts.length} 篇文章。
+      </p>
+    </section>
+
+    <div class="stack search-results" data-search-results data-reveal style="--reveal-delay: 110ms;">
+      {latestPosts.map((post) => (
+        <article class="surface search-result">
+          <p class="search-meta">
+            <time datetime={post.data.pubDate.toISOString()}>
+              {post.data.pubDate.toLocaleDateString("zh-CN")}
+            </time>
+            {post.data.updatedDate && <span>更新于 {post.data.updatedDate.toLocaleDateString("zh-CN")}</span>}
+          </p>
+          <h2 class="search-title">
+            <a href={withBasePath(`/posts/${post.slug}/`)}>{post.data.title}</a>
+          </h2>
+          <p class="muted search-desc">{post.data.description}</p>
+          {getPostTags(post).length > 0 && (
+            <div class="search-tags">
+              {getPostTags(post).map((tag) => (
+                <a class="search-tag" href={withBasePath(`/tags/${tagToUrlSegment(tag)}/`)}>
+                  #{tag}
+                </a>
+              ))}
+            </div>
+          )}
+        </article>
+      ))}
+    </div>
+
+    <noscript>
+      <p class="surface search-empty muted">已关闭 JavaScript，当前显示最新文章，完整搜索功能需要启用 JavaScript。</p>
+    </noscript>
+
+    <script
+      type="application/json"
+      id="search-data"
+      set:html={JSON.stringify(searchItems).replace(/</g, "\\u003c")}
+    ></script>
+    <script is:inline define:vars={{ tagBaseHref }}>
+      (() => {
+        const dataNode = document.getElementById("search-data");
+        const input = document.querySelector("[data-search-input]");
+        const clearButton = document.querySelector("[data-search-clear]");
+        const includeBodyCheckbox = document.querySelector("[data-search-body]");
+        const summary = document.querySelector("[data-search-summary]");
+        const output = document.querySelector("[data-search-results]");
+
+        if (
+          !(dataNode instanceof HTMLScriptElement) ||
+          !(input instanceof HTMLInputElement) ||
+          !(clearButton instanceof HTMLButtonElement) ||
+          !(includeBodyCheckbox instanceof HTMLInputElement) ||
+          !(summary instanceof HTMLElement) ||
+          !(output instanceof HTMLElement)
+        ) {
+          return;
+        }
+
+        let payload = [];
+        try {
+          payload = JSON.parse(dataNode.textContent || "[]");
+        } catch {
+          return;
+        }
+
+        if (!Array.isArray(payload)) {
+          return;
+        }
+
+        const normalize = (value) => value.toLowerCase().replace(/\s+/g, " ").trim();
+        const tokenize = (value) => normalize(value).split(" ").filter(Boolean);
+        const stripMarkdown = (value) =>
+          value
+            .replace(/```[\s\S]*?```/g, " ")
+            .replace(/`[^`]*`/g, " ")
+            .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+            .replace(/\[[^\]]+\]\([^)]+\)/g, " ")
+            .replace(/[#>*_~|]/g, " ")
+            .replace(/-{2,}/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        const indexed = payload
+          .map((raw) => {
+            const title = typeof raw.title === "string" ? raw.title : "";
+            const description = typeof raw.description === "string" ? raw.description : "";
+            const plainBody = stripMarkdown(typeof raw.body === "string" ? raw.body : "");
+            const tags = Array.isArray(raw.tags) ? raw.tags.filter((tag) => typeof tag === "string") : [];
+
+            return {
+              ...raw,
+              title,
+              description,
+              tags,
+              plainBody,
+              normalizedTitle: normalize(title),
+              normalizedDescription: normalize(description),
+              normalizedTags: tags.map((tag) => normalize(tag)),
+              normalizedBody: normalize(plainBody),
+              timestamp: Number(raw.timestamp) || 0
+            };
+          })
+          .sort((a, b) => b.timestamp - a.timestamp);
+
+        const state = {
+          query: "",
+          includeBody: true
+        };
+
+        const buildSnippet = (item, tokens) => {
+          if (item.description) {
+            return item.description;
+          }
+
+          if (!item.plainBody) {
+            return "暂无摘要。";
+          }
+
+          if (tokens.length === 0) {
+            return item.plainBody.slice(0, 130);
+          }
+
+          const firstMatch = tokens
+            .map((token) => item.normalizedBody.indexOf(token))
+            .filter((index) => index >= 0)
+            .sort((a, b) => a - b)[0];
+
+          const start = typeof firstMatch === "number" ? Math.max(0, firstMatch - 28) : 0;
+          const end = start + 130;
+          const prefix = start > 0 ? "..." : "";
+          const suffix = end < item.plainBody.length ? "..." : "";
+          return `${prefix}${item.plainBody.slice(start, end).trim()}${suffix}`;
+        };
+
+        const scoreByTokens = (item, tokens) => {
+          if (tokens.length === 0) {
+            return 0;
+          }
+
+          let score = 0;
+
+          for (const token of tokens) {
+            let tokenScore = 0;
+            if (item.normalizedTitle.includes(token)) {
+              tokenScore += 9;
+            }
+            if (item.normalizedDescription.includes(token)) {
+              tokenScore += 6;
+            }
+            if (item.normalizedTags.some((tag) => tag.includes(token))) {
+              tokenScore += 5;
+            }
+            if (state.includeBody && item.normalizedBody.includes(token)) {
+              tokenScore += 2;
+            }
+
+            if (tokenScore === 0) {
+              return null;
+            }
+
+            score += tokenScore;
+          }
+
+          return score;
+        };
+
+        const createResultNode = (item, snippet) => {
+          const card = document.createElement("article");
+          card.className = "surface search-result";
+
+          const meta = document.createElement("p");
+          meta.className = "search-meta";
+          const published = document.createElement("time");
+          published.dateTime = item.dateISO;
+          published.textContent = item.dateLabel || "";
+          meta.append(published);
+          if (item.updatedLabel) {
+            const updated = document.createElement("span");
+            updated.textContent = `更新于 ${item.updatedLabel}`;
+            meta.append(updated);
+          }
+
+          const title = document.createElement("h2");
+          title.className = "search-title";
+          const titleLink = document.createElement("a");
+          titleLink.href = item.href || "#";
+          titleLink.textContent = item.title || "未命名文章";
+          title.append(titleLink);
+
+          const desc = document.createElement("p");
+          desc.className = "muted search-desc";
+          desc.textContent = snippet;
+
+          card.append(meta, title, desc);
+
+          if (Array.isArray(item.tags) && item.tags.length > 0) {
+            const tags = document.createElement("div");
+            tags.className = "search-tags";
+            for (const tag of item.tags) {
+              const tagLink = document.createElement("a");
+              tagLink.className = "search-tag";
+              tagLink.href = `${tagBaseHref}${encodeURIComponent(tag)}/`;
+              tagLink.textContent = `#${tag}`;
+              tags.append(tagLink);
+            }
+            card.append(tags);
+          }
+
+          return card;
+        };
+
+        const render = () => {
+          const query = state.query.trim();
+          const tokens = tokenize(query);
+
+          const matched = tokens.length
+            ? indexed
+                .map((item) => {
+                  const score = scoreByTokens(item, tokens);
+                  if (score === null) {
+                    return null;
+                  }
+                  return { item, score };
+                })
+                .filter((item) => item !== null)
+                .sort((left, right) => right.score - left.score || right.item.timestamp - left.item.timestamp)
+                .slice(0, 60)
+            : indexed.slice(0, 12).map((item) => ({ item, score: 0 }));
+
+          output.replaceChildren();
+
+          if (matched.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "surface search-empty muted";
+            empty.textContent = "没有匹配结果，试试缩短关键词或取消正文匹配限制。";
+            output.append(empty);
+          } else {
+            for (const entry of matched) {
+              output.append(createResultNode(entry.item, buildSnippet(entry.item, tokens)));
+            }
+          }
+
+          if (tokens.length === 0) {
+            summary.textContent = `输入关键词开始搜索。当前展示最新 ${matched.length} 篇文章。`;
+          } else {
+            summary.textContent = `关键词 "${query}" 匹配 ${matched.length} 篇文章（按相关度排序）。`;
+          }
+        };
+
+        const syncUrlQuery = () => {
+          const url = new URL(window.location.href);
+          if (state.query.trim()) {
+            url.searchParams.set("q", state.query.trim());
+          } else {
+            url.searchParams.delete("q");
+          }
+          history.replaceState(null, "", url.toString());
+        };
+
+        input.addEventListener("input", () => {
+          state.query = input.value;
+          syncUrlQuery();
+          render();
+        });
+
+        includeBodyCheckbox.addEventListener("change", () => {
+          state.includeBody = includeBodyCheckbox.checked;
+          render();
+        });
+
+        clearButton.addEventListener("click", () => {
+          state.query = "";
+          input.value = "";
+          syncUrlQuery();
+          render();
+          input.focus();
+        });
+
+        document.addEventListener("keydown", (event) => {
+          if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) {
+            return;
+          }
+
+          const target = event.target;
+          if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+            return;
+          }
+
+          event.preventDefault();
+          input.focus();
+        });
+
+        const initialQuery = new URLSearchParams(window.location.search).get("q");
+        if (initialQuery) {
+          state.query = initialQuery;
+          input.value = initialQuery;
+        }
+
+        render();
+      })();
+    </script>
+  </section>
+</BaseLayout>
+
+<style>
+  .search-page {
+    gap: 1.15rem;
+  }
+
+  .search-head {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .search-panel {
+    border-radius: var(--radius-lg);
+    border-color: rgba(218, 205, 184, 0.9);
+    padding: 1rem;
+    display: grid;
+    gap: 0.82rem;
+  }
+
+  .search-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.62rem;
+  }
+
+  .search-label {
+    color: var(--text-soft);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .search-row input {
+    width: 100%;
+    min-height: 2.4rem;
+    border-radius: 12px;
+    border: 1px solid rgba(218, 205, 184, 0.95);
+    background: rgba(255, 255, 255, 0.78);
+    color: var(--text);
+    font: inherit;
+    padding: 0.38rem 0.66rem;
+  }
+
+  .search-row input::placeholder {
+    color: var(--text-soft);
+  }
+
+  .search-row input:focus-visible {
+    border-color: rgba(31, 120, 117, 0.52);
+  }
+
+  .search-clear {
+    min-height: 2.2rem;
+    border-radius: 999px;
+    border: 1px solid rgba(31, 120, 117, 0.34);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.2rem 0.76rem;
+    cursor: pointer;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .search-clear:hover {
+    transform: translateY(-1px);
+    border-color: rgba(31, 120, 117, 0.5);
+    background: rgba(31, 120, 117, 0.16);
+  }
+
+  .search-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+
+  .search-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    color: var(--text-soft);
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .search-toggle input {
+    accent-color: var(--accent-cyan);
+  }
+
+  .search-tip {
+    margin: 0;
+    font-size: 0.84rem;
+  }
+
+  .search-tip kbd {
+    font-family: "IBM Plex Mono", monospace;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.8);
+    padding: 0.04rem 0.35rem;
+    color: var(--text);
+  }
+
+  .search-summary {
+    margin: 0;
+    font-size: 0.9rem;
+  }
+
+  .search-results {
+    gap: 0.86rem;
+  }
+
+  .search-result {
+    border-radius: 16px;
+    border-color: rgba(218, 205, 184, 0.9);
+    padding: 0.96rem;
+    display: grid;
+    gap: 0.52rem;
+  }
+
+  .search-meta {
+    margin: 0;
+    font-size: 0.76rem;
+    color: var(--text-soft);
+    display: flex;
+    gap: 0.52rem;
+    flex-wrap: wrap;
+    font-family: "IBM Plex Mono", monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .search-title {
+    margin: 0;
+    font-size: 1.14rem;
+    line-height: 1.35;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  }
+
+  .search-title a {
+    color: var(--text);
+  }
+
+  .search-title a:hover {
+    color: var(--accent);
+  }
+
+  .search-desc {
+    margin: 0;
+    font-size: 0.93rem;
+    line-height: 1.5;
+  }
+
+  .search-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+  }
+
+  .search-tag {
+    border-radius: 999px;
+    border: 1px solid rgba(31, 120, 117, 0.3);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+    font-size: 0.76rem;
+    padding: 0.14rem 0.5rem;
+    line-height: 1.2;
+    transition:
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .search-tag:hover {
+    border-color: rgba(31, 120, 117, 0.48);
+    background: rgba(31, 120, 117, 0.14);
+    color: var(--accent-cyan);
+  }
+
+  .search-empty {
+    border-radius: 16px;
+    padding: 1rem;
+    margin: 0;
+  }
+
+  @media (max-width: 760px) {
+    .search-row {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+
+    .search-label {
+      display: none;
+    }
+
+    .search-clear {
+      width: fit-content;
+    }
+  }
+
+  :global(html[data-theme="dark"]) .search-panel,
+  :global(html[data-theme="dark"]) .search-result {
+    border-color: rgba(45, 59, 75, 0.95);
+  }
+
+  :global(html[data-theme="dark"]) .search-row input {
+    border-color: rgba(45, 59, 75, 0.95);
+    background: rgba(16, 24, 34, 0.84);
+    color: var(--text);
+  }
+
+  :global(html[data-theme="dark"]) .search-row input:focus-visible {
+    border-color: rgba(86, 198, 194, 0.56);
+  }
+
+  :global(html[data-theme="dark"]) .search-clear {
+    border-color: rgba(86, 198, 194, 0.4);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .search-clear:hover {
+    border-color: rgba(86, 198, 194, 0.54);
+    background: rgba(86, 198, 194, 0.2);
+  }
+
+  :global(html[data-theme="dark"]) .search-tip kbd {
+    border-color: rgba(45, 59, 75, 0.95);
+    background: rgba(16, 24, 34, 0.84);
+    color: var(--text);
+  }
+
+  :global(html[data-theme="dark"]) .search-tag {
+    border-color: rgba(86, 198, 194, 0.34);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .search-tag:hover {
+    border-color: rgba(86, 198, 194, 0.52);
+    background: rgba(86, 198, 194, 0.2);
+    color: var(--accent-cyan-soft);
+  }
+</style>

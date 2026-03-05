@@ -5,7 +5,14 @@ import CodeBlockWrapper from "@/components/CodeBlockWrapper.astro";
 import GiscusComments from "@/components/GiscusComments.astro";
 import TagPill from "@/components/TagPill.astro";
 import TOC from "@/components/TOC.astro";
-import { getAllPublishedPosts, getPostTags, tagToUrlSegment, type PostEntry } from "@/utils/posts";
+import { withBasePath } from "@/utils/paths";
+import {
+  getAllPublishedPosts,
+  getPostTags,
+  getRelatedPosts,
+  tagToUrlSegment,
+  type PostEntry
+} from "@/utils/posts";
 
 type Props = {
   post: PostEntry;
@@ -23,6 +30,8 @@ const { post } = Astro.props as Props;
 const { Content, headings } = await render(post);
 const toc = post.data.toc ? headings.filter((item) => item.depth >= 2 && item.depth <= 3) : [];
 const tags = getPostTags(post);
+const allPosts = await getAllPublishedPosts();
+const relatedPosts = getRelatedPosts(allPosts, post, 4);
 const canonicalPath = `/posts/${post.slug}/`;
 const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.data.cover?.src;
 ---
@@ -79,7 +88,41 @@ const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.da
       </div>
     </div>
 
-    <div data-reveal style="--reveal-delay: 160ms;">
+    {relatedPosts.length > 0 && (
+      <section class="stack related-section" data-reveal style="--reveal-delay: 160ms;">
+        <div>
+          <p class="section-kicker">Keep Reading</p>
+          <h2 class="section-title">相关文章</h2>
+        </div>
+        <div class="related-grid">
+          {relatedPosts.map(({ post: relatedPost, sharedTags }) => (
+            <article class="surface related-card">
+              <p class="related-meta">
+                <time datetime={relatedPost.data.pubDate.toISOString()}>
+                  {relatedPost.data.pubDate.toLocaleDateString("zh-CN")}
+                </time>
+                {relatedPost.data.updatedDate && (
+                  <span>更新于 {relatedPost.data.updatedDate.toLocaleDateString("zh-CN")}</span>
+                )}
+              </p>
+              <h3 class="related-title">
+                <a href={withBasePath(`/posts/${relatedPost.slug}/`)}>{relatedPost.data.title}</a>
+              </h3>
+              <p class="muted related-desc">{relatedPost.data.description}</p>
+              {sharedTags.length > 0 && (
+                <div class="related-tags" aria-label="共同标签">
+                  {sharedTags.map((tag) => (
+                    <TagPill tag={tag} href={withBasePath(`/tags/${tagToUrlSegment(tag)}/`)} />
+                  ))}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
+    )}
+
+    <div data-reveal style="--reveal-delay: 200ms;">
       <GiscusComments />
     </div>
   </article>
@@ -139,9 +182,71 @@ const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.da
     align-items: start;
   }
 
+  .related-section {
+    gap: 0.8rem;
+  }
+
+  .related-grid {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .related-card {
+    border-radius: 16px;
+    padding: 0.95rem;
+    border-color: rgba(218, 205, 184, 0.9);
+    display: grid;
+    gap: 0.56rem;
+  }
+
+  .related-meta {
+    margin: 0;
+    font-size: 0.76rem;
+    color: var(--text-soft);
+    display: flex;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    font-family: "IBM Plex Mono", monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .related-title {
+    margin: 0;
+    font-size: 1.05rem;
+    line-height: 1.35;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  }
+
+  .related-title a {
+    color: var(--text);
+  }
+
+  .related-title a:hover {
+    color: var(--accent);
+  }
+
+  .related-desc {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.48;
+  }
+
+  .related-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+  }
+
   @media (min-width: 1120px) {
     .article-layout {
       grid-template-columns: minmax(0, 1fr) 270px;
+    }
+  }
+
+  @media (min-width: 860px) {
+    .related-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
@@ -152,6 +257,10 @@ const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.da
   }
 
   :global(html[data-theme="dark"]) .meta-band {
+    border-color: rgba(45, 59, 75, 0.95);
+  }
+
+  :global(html[data-theme="dark"]) .related-card {
     border-color: rgba(45, 59, 75, 0.95);
   }
 
