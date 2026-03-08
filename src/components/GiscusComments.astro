@@ -5,60 +5,84 @@ const category = import.meta.env.PUBLIC_GISCUS_CATEGORY;
 const categoryId = import.meta.env.PUBLIC_GISCUS_CATEGORY_ID;
 
 const enabled = Boolean(repo && repoId && category && categoryId);
+
+if (!enabled) {
+  return null;
+}
 ---
 
 <section class="surface comments" aria-label="评论区">
   <h2>评论</h2>
+  <div
+    id="giscus-root"
+    data-repo={repo}
+    data-repo-id={repoId}
+    data-category={category}
+    data-category-id={categoryId}
+    data-mapping="pathname"
+    data-strict="0"
+    data-reactions-enabled="1"
+    data-emit-metadata="0"
+    data-input-position="top"
+    data-lang="zh-CN"
+    data-loading="lazy"
+  ></div>
+  <p id="giscus-fallback" class="fallback" hidden>评论暂时未加载，请稍后重试。</p>
+  <script is:inline>
+    (() => {
+      const root = document.getElementById("giscus-root");
+      const fallback = document.getElementById("giscus-fallback");
+      const getTheme = () =>
+        document.documentElement.getAttribute("data-theme") === "dark" ? "dark_dimmed" : "light";
 
-  {
-    enabled ? (
-      <>
-        <div
-          id="giscus-root"
-          data-repo={repo}
-          data-repo-id={repoId}
-          data-category={category}
-          data-category-id={categoryId}
-          data-mapping="pathname"
-          data-strict="0"
-          data-reactions-enabled="1"
-          data-emit-metadata="0"
-          data-input-position="top"
-          data-lang="zh-CN"
-          data-theme="dark_dimmed"
-          data-loading="lazy"
-        ></div>
-        <p id="giscus-fallback" class="fallback" hidden>评论加载失败，请稍后重试。</p>
-        <script is:inline>
-          const root = document.getElementById("giscus-root");
-          const fallback = document.getElementById("giscus-fallback");
+      if (!(root instanceof HTMLElement)) {
+        return;
+      }
 
-          if (root) {
-            const script = document.createElement("script");
-            script.src = "https://giscus.app/client.js";
-            script.async = true;
-            script.crossOrigin = "anonymous";
+      const applyTheme = () => {
+        const frame = document.querySelector("iframe.giscus-frame");
+        if (!(frame instanceof HTMLIFrameElement) || !frame.contentWindow) {
+          return;
+        }
 
-            for (const attribute of root.attributes) {
-              if (attribute.name.startsWith("data-")) {
-                script.setAttribute(attribute.name, attribute.value);
+        frame.contentWindow.postMessage(
+          {
+            giscus: {
+              setConfig: {
+                theme: getTheme()
               }
             }
+          },
+          "https://giscus.app"
+        );
+      };
 
-            script.onerror = () => {
-              if (fallback) {
-                fallback.hidden = false;
-              }
-            };
+      const script = document.createElement("script");
+      script.src = "https://giscus.app/client.js";
+      script.async = true;
+      script.crossOrigin = "anonymous";
+      script.setAttribute("data-theme", getTheme());
 
-            root.appendChild(script);
-          }
-        </script>
-      </>
-    ) : (
-      <p class="fallback">评论功能未配置。请在环境变量中配置 Giscus 参数。</p>
-    )
-  }
+      for (const attribute of root.attributes) {
+        if (attribute.name.startsWith("data-") && attribute.name !== "data-theme") {
+          script.setAttribute(attribute.name, attribute.value);
+        }
+      }
+
+      script.onerror = () => {
+        if (fallback instanceof HTMLElement) {
+          fallback.hidden = false;
+        }
+      };
+
+      script.onload = () => {
+        applyTheme();
+      };
+
+      window.addEventListener("theme:changed", applyTheme);
+      root.appendChild(script);
+    })();
+  </script>
 </section>
 
 <style>

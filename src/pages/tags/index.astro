@@ -1,25 +1,42 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import TagPill from "@/components/TagPill.astro";
+import TagCloud from "@/components/TagCloud.astro";
 import { getAllPublishedPosts, getTagsWithCount, tagToUrlSegment } from "@/utils/posts";
 
 const posts = await getAllPublishedPosts({ includeHidden: true });
 const tags = getTagsWithCount(posts);
+const totalTaggedPosts = new Set(posts.map((post) => post.slug)).size;
 ---
 
 <BaseLayout title="标签">
   <section class="stack tags-page" data-reveal>
-    <div>
+    <header class="surface tags-hero">
       <p class="section-kicker">Taxonomy</p>
       <h1 class="page-title">标签</h1>
-    </div>
-    <p class="muted">共 {tags.length} 个标签</p>
-    {tags.length > 0 ? (
-      <div class="tag-list">
-        {tags.map((item) => (
-          <TagPill tag={item.tag} count={item.count} href={`/tags/${tagToUrlSegment(item.tag)}/`} />
-        ))}
+      <p class="muted intro">
+        用主题而不是时间来逛站点。这里会收录全部文章的标签，也包含彩蛋内容对应的标签。
+      </p>
+      <div class="tag-stats" aria-label="标签概览">
+        <div class="tag-stat">
+          <span>标签总数</span>
+          <strong>{tags.length}</strong>
+        </div>
+        <div class="tag-stat">
+          <span>覆盖文章</span>
+          <strong>{totalTaggedPosts}</strong>
+        </div>
       </div>
+    </header>
+    {tags.length > 0 ? (
+      <section class="surface tag-cloud-panel">
+        <TagCloud
+          items={tags.map((item) => ({
+            ...item,
+            href: `/tags/${tagToUrlSegment(item.tag)}/`
+          }))}
+          ariaLabel="全部标签词云"
+        />
+      </section>
     ) : (
       <p class="surface empty muted">暂无标签。发布带 <code>tags</code> frontmatter 的文章后会自动出现。</p>
     )}
@@ -31,13 +48,61 @@ const tags = getTagsWithCount(posts);
     gap: 1rem;
   }
 
-  .tag-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem;
+  .tags-hero,
+  .tag-cloud-panel {
+    padding: clamp(1rem, 2vw, 1.25rem);
+    border-radius: var(--radius-lg);
+  }
+
+  .tags-hero {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .intro {
+    margin: 0;
+    max-width: 62ch;
+  }
+
+  .tag-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .tag-stat {
+    display: grid;
+    gap: 0.28rem;
+    padding: 0.85rem 0.95rem;
+    border-radius: 18px;
+    border: 1px solid rgba(31, 120, 117, 0.18);
+    background: rgba(31, 120, 117, 0.06);
+  }
+
+  .tag-stat span {
+    color: var(--text-soft);
+    font-size: 0.76rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .tag-stat strong {
+    font-size: clamp(1.25rem, 2vw, 1.6rem);
+    line-height: 1;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  }
+
+  .tag-cloud-panel {
+    border-color: rgba(218, 205, 184, 0.9);
   }
 
   .empty {
     padding: 1rem;
+  }
+
+  :global(html[data-theme="dark"]) .tag-stat {
+    border-color: rgba(86, 198, 194, 0.24);
+    background: rgba(86, 198, 194, 0.08);
   }
 </style>

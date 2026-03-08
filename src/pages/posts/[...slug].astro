@@ -1,19 +1,25 @@
 ---
+import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { render } from "astro:content";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import CodeBlockWrapper from "@/components/CodeBlockWrapper.astro";
 import GiscusComments from "@/components/GiscusComments.astro";
 import TagPill from "@/components/TagPill.astro";
 import TOC from "@/components/TOC.astro";
+import { getPostCategoryLabel } from "@/config/taxonomy";
 import { withBasePath } from "@/utils/paths";
+import { encryptHiddenContent } from "@/utils/hiddenContent";
 import {
   getAllPublishedPosts,
+  getPostProjectSlug,
+  getPostSeries,
   getPostTags,
   getRelatedPosts,
   normalizeUnlockCode,
   tagToUrlSegment,
   type PostEntry
 } from "@/utils/posts";
+import { getProjectBySlug } from "@/utils/projects";
 
 type Props = {
   post: PostEntry;
@@ -35,9 +41,21 @@ const allPosts = await getAllPublishedPosts({ includeHidden: true });
 const relatedPosts = getRelatedPosts(allPosts, post, 4);
 const canonicalPath = `/posts/${post.slug}/`;
 const coverSrc = typeof post.data.cover === "string" ? post.data.cover : post.data.cover?.src;
-const isHidden = post.data.hidden;
+const isHidden = post.data.hidden === true;
 const unlockCode = normalizeUnlockCode(post.data.unlockCode);
 const revealCode = post.data.revealCode;
+const series = getPostSeries(post);
+const projectSlug = getPostProjectSlug(post);
+const relatedProject = projectSlug ? await getProjectBySlug(projectSlug) : undefined;
+const showToc = !isHidden && toc.length >= 3;
+
+let hiddenContentPayload: ReturnType<typeof encryptHiddenContent> | null = null;
+
+if (isHidden && unlockCode) {
+  const container = await AstroContainer.create();
+  const hiddenContentHtml = await container.renderToString(Content);
+  hiddenContentPayload = encryptHiddenContent(hiddenContentHtml, unlockCode);
+}
 ---
 
 <BaseLayout
@@ -68,16 +86,34 @@ const revealCode = post.data.revealCode;
           </time>
         </div>
       )}
-      {typeof post.data.pinned === "number" && (
-        <div class="meta-row">
-          <span class="meta-label">置顶权重</span>
-          <span>#{post.data.pinned}</span>
+      <div class="meta-row meta-row-wrap">
+        <span class="meta-label">分类</span>
+        <span>{getPostCategoryLabel(post.data.category)}</span>
+      </div>
+      {isHidden && (
+        <div class="meta-row meta-row-wrap">
+          <span class="meta-label">状态</span>
+          <span>彩蛋内容</span>
+        </div>
+      )}
+      {series && (
+        <div class="meta-row meta-row-wrap">
+          <span class="meta-label">系列</span>
+          <span>{series}</span>
+        </div>
+      )}
+      {relatedProject && (
+        <div class="meta-row meta-row-wrap">
+          <span class="meta-label">项目</span>
+          <a class="meta-project-link" href={withBasePath(`/projects/${relatedProject.slug}/`)}>
+            {relatedProject.data.title}
+          </a>
         </div>
       )}
       {tags.length > 0 && (
         <div class="meta-tags">
           {tags.map((tag) => (
-            <TagPill tag={tag} href={`/tags/${tagToUrlSegment(tag)}/`} />
+            <TagPill tag={tag} href={withBasePath(`/tags/${tagToUrlSegment(tag)}/`)} />
           ))}
         </div>
       )}
@@ -86,25 +122,57 @@ const revealCode = post.data.revealCode;
     {isHidden && (
       <section class="surface lock-panel" data-lock-panel data-reveal style="--reveal-delay: 120ms;">
         <div>
-          <p class="section-kicker">Locked</p>
-          <h2 class="section-title">文章已锁定</h2>
-          <p class="muted">前往控制台输入解锁码后即可查看全文。</p>
+          <p class="section-kicker">Hidden Dispatch</p>
+          <h2 class="section-title">这是一篇彩蛋内容</h2>
+          <p class="muted">
+            输入解锁码即可在当前页解锁阅读。你也可以先去控制台记住解锁码，再回到这里自动开启。
+          </p>
         </div>
-        <div class="lock-actions">
-          <a class="lock-link" href={withBasePath("/console/")}>前往控制台解锁</a>
-          <span class="muted">
-            示例：<code>unlock XXXX</code>
-          </span>
-        </div>
+        <form class="unlock-form" data-unlock-form>
+          <label class="unlock-label" for="unlock-input">解锁码</label>
+          <div class="unlock-row">
+            <input
+              id="unlock-input"
+              class="unlock-input"
+              type="password"
+              inputmode="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="输入解锁码"
+              data-unlock-input
+            />
+            <button class="lock-link" type="submit">解锁阅读</button>
+          </div>
+          <p class="muted unlock-help">源码中不会直接包含正文明文；当前浏览器会记住已成功使用的解锁码。</p>
+          <p class="unlock-feedback muted" data-unlock-feedback aria-live="polite"></p>
+          <a class="lock-console-link" href={withBasePath("/console/")}>去控制台记住解锁码</a>
+        </form>
       </section>
+    )}
+
+    {coverSrc && (
+      <figure class="surface cover-frame" data-reveal style="--reveal-delay: 140ms;">
+        <img class="post-cover" src={coverSrc} alt={post.data.title} loading="eager" decoding="async" />
+      </figure>
     )}
 
     <div class="lock-content" data-lock-content data-locked={isHidden ? "true" : "false"}>
       <div class="article-layout" data-reveal style="--reveal-delay: 160ms;">
-        <CodeBlockWrapper>
-          <Content />
-        </CodeBlockWrapper>
-        <div class="toc-wrap">
+        {
+          isHidden ? (
+            <div class="surface hidden-content-shell">
+              <p class="muted hidden-content-status" data-hidden-status>解锁后会在这里加载正文。</p>
+              <div class="prose hidden-content-body" data-hidden-content></div>
+            </div>
+          ) : (
+            <div class="surface post-content">
+              <CodeBlockWrapper>
+                <Content />
+              </CodeBlockWrapper>
+            </div>
+          )
+        }
+        <div class="toc-wrap" hidden={!showToc}>
           <TOC headings={toc} />
         </div>
       </div>
@@ -130,53 +198,71 @@ const revealCode = post.data.revealCode;
             <h2 class="section-title">相关文章</h2>
           </div>
           <div class="related-grid">
-          {relatedPosts.map(({ post: relatedPost }) => {
-            const relatedTags = getPostTags(relatedPost);
-            const relatedUnlockCode = relatedPost.data.hidden
-              ? normalizeUnlockCode(relatedPost.data.unlockCode)
-              : undefined;
-            return (
-              <article
-                class="surface related-card"
-                data-unlock-code={relatedUnlockCode}
-                hidden={relatedPost.data.hidden}
-              >
-              <p class="related-meta">
-                <time datetime={relatedPost.data.pubDate.toISOString()}>
-                  {relatedPost.data.pubDate.toLocaleDateString("zh-CN")}
-                </time>
-                  {relatedPost.data.updatedDate && (
-                    <span>更新于 {relatedPost.data.updatedDate.toLocaleDateString("zh-CN")}</span>
+            {relatedPosts.map(({ post: relatedPost }) => {
+              const relatedTags = getPostTags(relatedPost);
+              return (
+                <article class:list={["surface related-card", { "related-card-hidden": relatedPost.data.hidden }]}>
+                  <p class="related-meta">
+                    <time datetime={relatedPost.data.pubDate.toISOString()}>
+                      {relatedPost.data.pubDate.toLocaleDateString("zh-CN")}
+                    </time>
+                    {relatedPost.data.updatedDate && (
+                      <span>更新于 {relatedPost.data.updatedDate.toLocaleDateString("zh-CN")}</span>
+                    )}
+                    {relatedPost.data.hidden && <span>彩蛋内容</span>}
+                  </p>
+                  <h3 class="related-title">
+                    <a href={withBasePath(`/posts/${relatedPost.slug}/`)}>{relatedPost.data.title}</a>
+                  </h3>
+                  <p class="muted related-desc">{relatedPost.data.description}</p>
+                  {relatedTags.length > 0 && (
+                    <div class="related-tags" aria-label="文章标签">
+                      {relatedTags.map((tag) => (
+                        <TagPill tag={tag} href={withBasePath(`/tags/${tagToUrlSegment(tag)}/`)} />
+                      ))}
+                    </div>
                   )}
-                </p>
-              <h3 class="related-title">
-                <a href={withBasePath(`/posts/${relatedPost.slug}/`)}>{relatedPost.data.title}</a>
-              </h3>
-              <p class="muted related-desc">{relatedPost.data.description}</p>
-              {relatedTags.length > 0 && (
-                <div class="related-tags" aria-label="文章标签">
-                  {relatedTags.map((tag) => (
-                    <TagPill tag={tag} href={withBasePath(`/tags/${tagToUrlSegment(tag)}/`)} />
-                  ))}
-                </div>
-              )}
-              </article>
-            );
-          })}
-        </div>
-      </section>
-    )}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
-    <div data-reveal style="--reveal-delay: 260ms;">
-      <GiscusComments />
+      <div data-reveal style="--reveal-delay: 260ms;">
+        <GiscusComments />
+      </div>
     </div>
-  </div>
   </article>
 
-  <script is:inline define:vars={{ unlockCode, isHidden }}>
+  {isHidden && hiddenContentPayload && (
+    <script id="hidden-content-payload" type="application/json" set:html={JSON.stringify(hiddenContentPayload)}></script>
+  )}
+
+  <script is:inline define:vars={{ isHidden }}>
     (() => {
       const STORAGE_KEY = "uent26-unlock-codes";
       const normalize = (value) => String(value ?? "").trim().toLowerCase();
+
+      const setupRevealCopy = () => {
+        const revealCode = document.querySelector("[data-reveal-code]");
+        const copyButton = document.querySelector("[data-reveal-copy]");
+
+        if (!(revealCode instanceof HTMLElement) || !(copyButton instanceof HTMLButtonElement) || !navigator.clipboard) {
+          return;
+        }
+
+        copyButton.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(revealCode.textContent?.trim() ?? "");
+            copyButton.textContent = "已复制";
+            window.setTimeout(() => {
+              copyButton.textContent = "复制";
+            }, 1400);
+          } catch {}
+        });
+      };
+
       const getStoredCodes = () => {
         try {
           const raw = localStorage.getItem(STORAGE_KEY);
@@ -193,22 +279,18 @@ const revealCode = post.data.revealCode;
         }
       };
 
+      const setStoredCodes = (codes) => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify([...codes]));
+        } catch {}
+      };
+
+      setupRevealCopy();
+
       const lockContent = document.querySelector("[data-lock-content]");
       const lockPanel = document.querySelector("[data-lock-panel]");
 
-      const applyLockState = () => {
-        if (!isHidden) {
-          if (lockContent instanceof HTMLElement) {
-            lockContent.setAttribute("data-locked", "false");
-            lockContent.setAttribute("aria-hidden", "false");
-          }
-          return;
-        }
-
-        const codes = getStoredCodes();
-        const normalizedCode = normalize(unlockCode);
-        const unlocked = Boolean(normalizedCode && codes.has(normalizedCode));
-
+      const setUnlockedState = (unlocked) => {
         if (lockContent instanceof HTMLElement) {
           lockContent.setAttribute("data-locked", unlocked ? "false" : "true");
           lockContent.setAttribute("aria-hidden", unlocked ? "false" : "true");
@@ -223,145 +305,349 @@ const revealCode = post.data.revealCode;
         }
       };
 
-      applyLockState();
+      if (!isHidden) {
+        setUnlockedState(true);
+        return;
+      }
 
-      if (isHidden) {
-        window.addEventListener("unlock:changed", applyLockState);
-        window.addEventListener("storage", (event) => {
-          if (event.key === STORAGE_KEY) {
-            applyLockState();
+      const payloadNode = document.getElementById("hidden-content-payload");
+      const unlockForm = document.querySelector("[data-unlock-form]");
+      const unlockInput = document.querySelector("[data-unlock-input]");
+      const unlockFeedback = document.querySelector("[data-unlock-feedback]");
+      const hiddenContent = document.querySelector("[data-hidden-content]");
+      const hiddenStatus = document.querySelector("[data-hidden-status]");
+
+      let payload = null;
+      try {
+        payload = payloadNode ? JSON.parse(payloadNode.textContent || "null") : null;
+      } catch {
+        payload = null;
+      }
+
+      const setFeedback = (message, isError = false) => {
+        if (unlockFeedback instanceof HTMLElement) {
+          unlockFeedback.textContent = message;
+          unlockFeedback.dataset.state = isError ? "error" : "success";
+        }
+      };
+
+      const base64ToBytes = (value) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+
+      const decryptContent = async (code) => {
+        if (!payload || !window.crypto?.subtle) {
+          throw new Error("unsupported");
+        }
+
+        const encoder = new TextEncoder();
+        const keyMaterial = await window.crypto.subtle.importKey(
+          "raw",
+          encoder.encode(normalize(code)),
+          "PBKDF2",
+          false,
+          ["deriveKey"]
+        );
+        const key = await window.crypto.subtle.deriveKey(
+          {
+            name: "PBKDF2",
+            salt: base64ToBytes(payload.salt),
+            iterations: payload.iterations,
+            hash: "SHA-256"
+          },
+          keyMaterial,
+          { name: "AES-GCM", length: 256 },
+          false,
+          ["decrypt"]
+        );
+        const decrypted = await window.crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: base64ToBytes(payload.iv) },
+          key,
+          base64ToBytes(payload.ciphertext)
+        );
+
+        return new TextDecoder().decode(decrypted);
+      };
+
+      const revealContent = (html) => {
+        if (hiddenContent instanceof HTMLElement) {
+          hiddenContent.innerHTML = html;
+        }
+
+        if (hiddenStatus instanceof HTMLElement) {
+          hiddenStatus.textContent = "";
+          hiddenStatus.hidden = true;
+        }
+
+        setUnlockedState(true);
+      };
+
+      const tryUnlock = async (rawCode, persist = false) => {
+        const code = normalize(rawCode);
+        if (!code) {
+          setFeedback("请输入解锁码。", true);
+          return false;
+        }
+
+        try {
+          const html = await decryptContent(code);
+          if (persist) {
+            const codes = getStoredCodes();
+            codes.add(code);
+            setStoredCodes(codes);
+            window.dispatchEvent(new CustomEvent("unlock:changed"));
           }
+          revealContent(html);
+          setFeedback("已解锁，正文已加载。", false);
+          return true;
+        } catch {
+          setFeedback("解锁码无效，或当前浏览器暂不支持本地解密。", true);
+          return false;
+        }
+      };
+
+      const tryStoredCodes = async () => {
+        for (const code of getStoredCodes()) {
+          const unlocked = await tryUnlock(code, false);
+          if (unlocked) {
+            return true;
+          }
+        }
+        setUnlockedState(false);
+        return false;
+      };
+
+      setUnlockedState(false);
+      void tryStoredCodes();
+
+      if (unlockForm instanceof HTMLFormElement) {
+        unlockForm.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const code = unlockInput instanceof HTMLInputElement ? unlockInput.value : "";
+          void tryUnlock(code, true).then((success) => {
+            if (success && unlockInput instanceof HTMLInputElement) {
+              unlockInput.value = "";
+            }
+          });
         });
       }
 
-      const copyButton = document.querySelector("[data-reveal-copy]");
-      const codeNode = document.querySelector("[data-reveal-code]");
-      if (copyButton instanceof HTMLButtonElement && codeNode instanceof HTMLElement) {
-        const defaultLabel = copyButton.textContent || "复制";
-        copyButton.addEventListener("click", async () => {
-          const codeText = codeNode.textContent?.trim() || "";
-          if (!codeText) {
-            return;
-          }
-          try {
-            await navigator.clipboard.writeText(codeText);
-            copyButton.textContent = "已复制";
-            copyButton.disabled = true;
-            setTimeout(() => {
-              copyButton.disabled = false;
-              copyButton.textContent = defaultLabel;
-            }, 1400);
-          } catch {
-            copyButton.textContent = "复制失败";
-            setTimeout(() => {
-              copyButton.textContent = defaultLabel;
-            }, 1400);
-          }
-        });
-      }
+      window.addEventListener("unlock:changed", () => {
+        if (lockContent instanceof HTMLElement && lockContent.getAttribute("data-locked") === "true") {
+          void tryStoredCodes();
+        }
+      });
     })();
   </script>
 </BaseLayout>
 
 <style>
   .post-shell {
-    gap: 1.35rem;
+    gap: 0.95rem;
+  }
+
+  .post-header,
+  .meta-band,
+  .lock-panel,
+  .cover-frame,
+  .hidden-content-shell,
+  .post-content,
+  .reveal-panel {
+    padding: clamp(1rem, 2vw, 1.25rem);
+    border-radius: var(--radius-lg);
   }
 
   .post-header {
-    padding: clamp(1.1rem, 2.2vw, 1.55rem);
-    border-radius: var(--radius-lg);
+    display: grid;
+    gap: 0.72rem;
   }
 
   .summary {
     margin: 0;
-    max-width: 64ch;
+    max-width: 62ch;
   }
 
   .meta-band {
-    display: grid;
-    gap: 0.7rem;
-    padding: 1rem;
-    border-radius: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.72rem;
     border-color: rgba(218, 205, 184, 0.9);
   }
 
   .meta-row {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 0.55rem;
-    font-size: 0.86rem;
+    gap: 0.52rem;
     color: var(--text-soft);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.76rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .meta-row-wrap {
+    flex-wrap: wrap;
   }
 
   .meta-label {
-    border: 1px solid rgba(31, 120, 117, 0.3);
-    border-radius: 999px;
-    padding: 0.1rem 0.48rem;
-    color: var(--accent-cyan);
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  .meta-tags {
-    display: flex;
-    gap: 0.45rem;
-    flex-wrap: wrap;
-    margin-top: 0.1rem;
-  }
-
-  .article-layout {
-    display: grid;
-    gap: 1.2rem;
-    align-items: start;
-  }
-
-  .lock-panel {
-    padding: 1rem;
-    border-radius: var(--radius-lg);
-    display: grid;
-    gap: 0.7rem;
-  }
-
-  .lock-actions {
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    min-height: 1.8rem;
+    padding: 0.18rem 0.52rem;
+    border-radius: 999px;
+    border: 1px solid rgba(31, 120, 117, 0.3);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+  }
+
+  .meta-project-link {
+    color: var(--accent-cyan);
+  }
+
+  .meta-project-link:hover {
+    color: var(--accent);
+  }
+
+  .meta-tags,
+  .related-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+  }
+
+  .lock-panel,
+  .reveal-panel {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .unlock-form {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .unlock-label {
+    color: var(--text-soft);
+    font-size: 0.76rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .unlock-row {
+    display: flex;
     gap: 0.6rem;
     flex-wrap: wrap;
   }
 
-  .lock-link {
-    border: 1px solid rgba(159, 57, 34, 0.34);
+  .unlock-input {
+    flex: 1 1 220px;
+    min-height: 2.5rem;
+    border-radius: 12px;
+    border: 1px solid rgba(218, 205, 184, 0.95);
+    background: rgba(255, 255, 255, 0.82);
+    color: var(--text);
+    font: inherit;
+    padding: 0.42rem 0.72rem;
+  }
+
+  .unlock-input:focus-visible {
+    border-color: rgba(31, 120, 117, 0.52);
+    outline: none;
+  }
+
+  .lock-link,
+  .reveal-copy {
     border-radius: 999px;
-    padding: 0.3rem 0.78rem;
-    background: linear-gradient(120deg, rgba(196, 82, 55, 0.2), rgba(196, 82, 55, 0.1));
-    color: var(--accent-strong);
-    font-size: 0.85rem;
+    border: 1px solid rgba(31, 120, 117, 0.34);
+    padding: 0.26rem 0.78rem;
+    background: rgba(31, 120, 117, 0.1);
+    color: var(--accent-cyan);
+    font-size: 0.82rem;
     font-weight: 600;
-    letter-spacing: 0.03em;
+    cursor: pointer;
     transition:
       transform 220ms var(--ease-out),
       border-color 220ms var(--ease-out),
       background 220ms var(--ease-out);
   }
 
-  .lock-link:hover {
+  .lock-link:hover,
+  .reveal-copy:hover {
     transform: translateY(-1px);
-    border-color: rgba(159, 57, 34, 0.5);
-    background: linear-gradient(120deg, rgba(196, 82, 55, 0.28), rgba(196, 82, 55, 0.16));
+    border-color: rgba(31, 120, 117, 0.52);
+    background: rgba(31, 120, 117, 0.18);
+  }
+
+  .unlock-help,
+  .unlock-feedback {
+    margin: 0;
+  }
+
+  .unlock-feedback[data-state="error"] {
     color: var(--accent-strong);
   }
 
-  .lock-content[data-locked="true"] {
-    display: none;
+  .lock-console-link {
+    width: fit-content;
+    color: var(--accent-cyan);
+    font-weight: 600;
   }
 
-  .reveal-panel {
-    padding: 1rem;
-    border-radius: var(--radius-lg);
+  .cover-frame {
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .post-cover {
+    display: block;
+    width: 100%;
+    max-height: 420px;
+    object-fit: cover;
+  }
+
+  .lock-content[data-locked="true"] .article-layout,
+  .lock-content[data-locked="true"] .related-section,
+  .lock-content[data-locked="true"] .reveal-panel,
+  .lock-content[data-locked="true"] > div:last-child {
+    opacity: 1;
+  }
+
+  .article-layout {
     display: grid;
-    gap: 0.75rem;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .hidden-content-shell,
+  .post-content {
+    min-width: 0;
+  }
+
+  .hidden-content-shell {
+    border: 1px solid rgba(218, 205, 184, 0.92);
+    background:
+      radial-gradient(circle at 95% 4%, rgba(31, 120, 117, 0.14), transparent 26%),
+      linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(246, 238, 223, 0.92));
+  }
+
+  .hidden-content-status {
+    margin: 0 0 0.8rem;
+  }
+
+  .hidden-content-body {
+    max-width: none;
+  }
+
+  .hidden-content-body :where(h1, h2, h3):first-child {
+    margin-top: 0;
+  }
+
+  .post-content :global(.prose) {
+    max-width: none;
+  }
+
+  .toc-wrap {
+    position: sticky;
+    top: 5.6rem;
   }
 
   .reveal-code-row {
@@ -380,27 +666,6 @@ const revealCode = post.data.revealCode;
     color: var(--inline-code-text);
   }
 
-  .reveal-copy {
-    border: 1px solid rgba(31, 120, 117, 0.34);
-    border-radius: 999px;
-    padding: 0.26rem 0.72rem;
-    background: rgba(31, 120, 117, 0.1);
-    color: var(--accent-cyan);
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition:
-      transform 220ms var(--ease-out),
-      border-color 220ms var(--ease-out),
-      background 220ms var(--ease-out);
-  }
-
-  .reveal-copy:hover {
-    transform: translateY(-1px);
-    border-color: rgba(31, 120, 117, 0.5);
-    background: rgba(31, 120, 117, 0.18);
-  }
-
   .related-section {
     gap: 0.8rem;
   }
@@ -416,6 +681,10 @@ const revealCode = post.data.revealCode;
     border-color: rgba(218, 205, 184, 0.9);
     display: grid;
     gap: 0.56rem;
+  }
+
+  .related-card-hidden {
+    border-style: dashed;
   }
 
   .related-meta {
@@ -451,12 +720,6 @@ const revealCode = post.data.revealCode;
     line-height: 1.48;
   }
 
-  .related-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.42rem;
-  }
-
   @media (min-width: 1120px) {
     .article-layout {
       grid-template-columns: minmax(0, 1fr) 270px;
@@ -475,16 +738,50 @@ const revealCode = post.data.revealCode;
     }
   }
 
-  :global(html[data-theme="dark"]) .meta-band {
-    border-color: rgba(45, 59, 75, 0.95);
+  @media (max-width: 720px) {
+    .unlock-row {
+      align-items: stretch;
+    }
+
+    .lock-link {
+      width: 100%;
+    }
   }
 
-  :global(html[data-theme="dark"]) .related-card {
+  :global(html[data-theme="dark"]) .meta-band,
+  :global(html[data-theme="dark"]) .related-card,
+  :global(html[data-theme="dark"]) .unlock-input,
+  :global(html[data-theme="dark"]) .post-content {
     border-color: rgba(45, 59, 75, 0.95);
   }
 
   :global(html[data-theme="dark"]) .meta-label {
     border-color: rgba(86, 198, 194, 0.4);
+    background: rgba(86, 198, 194, 0.12);
     color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .unlock-input {
+    background: rgba(16, 24, 34, 0.84);
+  }
+
+  :global(html[data-theme="dark"]) .hidden-content-shell {
+    border-color: rgba(45, 59, 75, 0.95);
+    background:
+      radial-gradient(circle at 95% 4%, rgba(86, 198, 194, 0.16), transparent 28%),
+      linear-gradient(160deg, rgba(24, 35, 46, 0.96), rgba(17, 25, 35, 0.92));
+  }
+
+  :global(html[data-theme="dark"]) .lock-link,
+  :global(html[data-theme="dark"]) .reveal-copy {
+    border-color: rgba(86, 198, 194, 0.4);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .lock-link:hover,
+  :global(html[data-theme="dark"]) .reveal-copy:hover {
+    border-color: rgba(86, 198, 194, 0.56);
+    background: rgba(86, 198, 194, 0.18);
   }
 </style>

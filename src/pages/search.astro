@@ -1,30 +1,65 @@
 ---
+import { getPostCategoryLabel, getProjectStatusLabel } from "@/config/taxonomy";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import { withBasePath } from "@/utils/paths";
-import { getAllPublishedPosts, getPostTags, normalizeUnlockCode, tagToUrlSegment } from "@/utils/posts";
+import {
+  getAllPublishedPosts,
+  getPostProjectSlug,
+  getPostSeries,
+  getPostTags
+} from "@/utils/posts";
+import { getAllProjects } from "@/utils/projects";
 
 const posts = await getAllPublishedPosts({ includeHidden: true });
-const visiblePosts = posts.filter((post) => !post.data.hidden);
-const latestPosts = visiblePosts.slice(0, 12);
-const tagBaseHref = withBasePath("/tags/");
+const projects = await getAllProjects();
+const projectTitleMap = new Map(projects.map((project) => [project.slug, project.data.title]));
+const hiddenPostCount = posts.filter((post) => post.data.hidden).length;
 
-const searchItems = posts.map((post) => {
-  const updatedDate = post.data.updatedDate;
-  return {
-    slug: post.slug,
-    href: withBasePath(`/posts/${post.slug}/`),
-    title: post.data.title,
-    description: post.data.description,
-    body: post.body,
-    tags: getPostTags(post),
-    dateISO: post.data.pubDate.toISOString(),
-    dateLabel: post.data.pubDate.toLocaleDateString("zh-CN"),
-    updatedLabel: updatedDate ? updatedDate.toLocaleDateString("zh-CN") : null,
-    timestamp: post.data.pubDate.getTime(),
-    hidden: post.data.hidden,
-    unlockCode: normalizeUnlockCode(post.data.unlockCode)
-  };
-});
+const searchItems = [
+  ...posts.map((post) => {
+    const projectSlug = getPostProjectSlug(post);
+    const projectTitle = projectSlug ? projectTitleMap.get(projectSlug) : undefined;
+    const isHidden = post.data.hidden === true;
+
+    return {
+      type: "post",
+      href: withBasePath(`/posts/${post.slug}/`),
+      title: post.data.title,
+      description: post.data.description,
+      body: isHidden ? "" : post.body,
+      bodySearchable: !isHidden,
+      hidden: isHidden,
+      timestamp: (post.data.updatedDate ?? post.data.pubDate).getTime(),
+      dateLabel: (post.data.updatedDate ?? post.data.pubDate).toLocaleDateString("zh-CN"),
+      metaLabel: `文章 · ${getPostCategoryLabel(post.data.category)}`,
+      actionLabel: isHidden ? "解锁阅读" : "阅读全文",
+      tags: getPostTags(post),
+      chips: [
+        ...(isHidden ? ["彩蛋内容"] : []),
+        getPostCategoryLabel(post.data.category),
+        ...(getPostSeries(post) ? [`系列 · ${getPostSeries(post)}`] : []),
+        ...(projectTitle ? [`项目 · ${projectTitle}`] : [])
+      ]
+    };
+  }),
+  ...projects.map((project) => ({
+    type: "project",
+    href: withBasePath(`/projects/${project.slug}/`),
+    title: project.data.title,
+    description: project.data.summary,
+    body: project.body,
+      bodySearchable: true,
+      hidden: false,
+      timestamp: (project.data.updatedDate ?? new Date("2026-01-01")).getTime(),
+      dateLabel: project.data.updatedDate?.toLocaleDateString("zh-CN") ?? "暂无更新日期",
+      metaLabel: `项目 · ${getProjectStatusLabel(project.data.status)}`,
+      actionLabel: "查看项目",
+      tags: project.data.stack,
+      chips: [getProjectStatusLabel(project.data.status), ...project.data.highlights.slice(0, 2)]
+    }))
+].sort((left, right) => right.timestamp - left.timestamp);
+
+const defaultItems = searchItems;
 ---
 
 <BaseLayout title="搜索">
@@ -35,7 +70,11 @@ const searchItems = posts.map((post) => {
         <h1 class="page-title">全站搜索</h1>
       </div>
       <p class="muted">
-        搜索标题、摘要、标签与正文。当前索引 {posts.length} 篇文章，支持空格分词组合检索。
+        现在可以同时搜索文章和项目。当前索引 {posts.length} 篇文章、{projects.length} 个项目；
+        {hiddenPostCount > 0 ? `其中包含 ${hiddenPostCount} 篇彩蛋内容。` : ""}
+      </p>
+      <p class="muted search-head-note">
+        彩蛋内容会出现在搜索结果里，但仍然只展示标题、摘要和标签，不会直接暴露正文。
       </p>
     </header>
 
@@ -45,11 +84,16 @@ const searchItems = posts.map((post) => {
         <input
           id="search-input"
           type="search"
-          placeholder="例如: astro 性能 优化"
+          placeholder="例如: astro 写作 项目"
           autocomplete="off"
           spellcheck="false"
           data-search-input
         />
+        <select data-search-scope aria-label="搜索范围">
+          <option value="all">全部</option>
+          <option value="post">文章</option>
+          <option value="project">项目</option>
+        </select>
         <button type="button" class="search-clear" data-search-clear>清空</button>
       </div>
 
@@ -62,29 +106,30 @@ const searchItems = posts.map((post) => {
       </div>
 
       <p class="muted search-summary" data-search-summary>
-        输入关键词开始搜索。当前展示最新 {latestPosts.length} 篇文章。
+        输入关键词开始搜索。当前收录 {defaultItems.length} 条内容。
       </p>
     </section>
 
-    <div class="stack search-results" data-search-results data-reveal style="--reveal-delay: 110ms;">
-      {latestPosts.map((post) => (
+    <div class="search-results" data-search-results data-reveal style="--reveal-delay: 110ms;">
+      {defaultItems.map((item) => (
         <article class="surface search-result">
-          <p class="search-meta">
-            <time datetime={post.data.pubDate.toISOString()}>
-              {post.data.pubDate.toLocaleDateString("zh-CN")}
-            </time>
-            {post.data.updatedDate && <span>更新于 {post.data.updatedDate.toLocaleDateString("zh-CN")}</span>}
-          </p>
-          <h2 class="search-title">
-            <a href={withBasePath(`/posts/${post.slug}/`)}>{post.data.title}</a>
-          </h2>
-          <p class="muted search-desc">{post.data.description}</p>
-          {getPostTags(post).length > 0 && (
+          <div class="search-result-head">
+            <p class="search-meta">
+              <span>{item.metaLabel}</span>
+              <span>{item.dateLabel}</span>
+            </p>
+            <a class="search-action" href={item.href}>{item.actionLabel}</a>
+          </div>
+          <div class="search-result-body">
+            <h2 class="search-title">
+              <a href={item.href}>{item.title}</a>
+            </h2>
+            <p class="muted search-desc">{item.description}</p>
+          </div>
+          {item.chips.length > 0 && (
             <div class="search-tags">
-              {getPostTags(post).map((tag) => (
-                <a class="search-tag" href={withBasePath(`/tags/${tagToUrlSegment(tag)}/`)}>
-                  #{tag}
-                </a>
+              {item.chips.map((chip) => (
+                <span class="search-tag">{chip}</span>
               ))}
             </div>
           )}
@@ -92,310 +137,189 @@ const searchItems = posts.map((post) => {
       ))}
     </div>
 
-    <noscript>
-      <p class="surface search-empty muted">已关闭 JavaScript，当前显示最新文章，完整搜索功能需要启用 JavaScript。</p>
-    </noscript>
-
-    <script
-      type="application/json"
-      id="search-data"
-      set:html={JSON.stringify(searchItems).replace(/</g, "\\u003c")}
-    ></script>
-    <script is:inline define:vars={{ tagBaseHref }}>
+    <script id="search-data" type="application/json" set:html={JSON.stringify({ items: searchItems })}></script>
+    <script is:inline>
       (() => {
         const dataNode = document.getElementById("search-data");
         const input = document.querySelector("[data-search-input]");
+        const scopeSelect = document.querySelector("[data-search-scope]");
+        const includeBody = document.querySelector("[data-search-body]");
         const clearButton = document.querySelector("[data-search-clear]");
-        const includeBodyCheckbox = document.querySelector("[data-search-body]");
         const summary = document.querySelector("[data-search-summary]");
         const output = document.querySelector("[data-search-results]");
 
         if (
           !(dataNode instanceof HTMLScriptElement) ||
           !(input instanceof HTMLInputElement) ||
+          !(scopeSelect instanceof HTMLSelectElement) ||
+          !(includeBody instanceof HTMLInputElement) ||
           !(clearButton instanceof HTMLButtonElement) ||
-          !(includeBodyCheckbox instanceof HTMLInputElement) ||
           !(summary instanceof HTMLElement) ||
           !(output instanceof HTMLElement)
         ) {
           return;
         }
 
-        let payload = [];
+        let payload = { items: [] };
         try {
-          payload = JSON.parse(dataNode.textContent || "[]");
+          payload = JSON.parse(dataNode.textContent || "{\"items\":[]}");
         } catch {
           return;
         }
 
-        if (!Array.isArray(payload)) {
-          return;
-        }
+        const normalize = (value) => String(value ?? "").trim().toLowerCase();
+        const tokenize = (value) =>
+          normalize(value)
+            .split(/\s+/)
+            .map((item) => item.trim())
+            .filter(Boolean);
 
-        const STORAGE_KEY = "uent26-unlock-codes";
-        const normalizeCode = (value) => String(value ?? "").trim().toLowerCase();
-        const getStoredCodes = () => {
-          try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) {
-              return new Set();
+        const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+        const appendHighlightedText = (node, value, tokens) => {
+          const text = String(value || "");
+          if (!text || tokens.length === 0) {
+            node.textContent = text;
+            return;
+          }
+
+          const uniqueTokens = [...new Set(tokens)].sort((left, right) => right.length - left.length);
+          const pattern = new RegExp(`(${uniqueTokens.map(escapeRegExp).join("|")})`, "gi");
+          let lastIndex = 0;
+
+          for (const match of text.matchAll(pattern)) {
+            const index = match.index ?? 0;
+            if (index > lastIndex) {
+              node.append(document.createTextNode(text.slice(lastIndex, index)));
             }
-            const parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed)) {
-              return new Set();
-            }
-            return new Set(parsed.map((item) => normalizeCode(item)).filter(Boolean));
-          } catch {
-            return new Set();
+
+            const mark = document.createElement("mark");
+            mark.textContent = match[0] || "";
+            node.append(mark);
+            lastIndex = index + (match[0]?.length || 0);
+          }
+
+          if (lastIndex < text.length) {
+            node.append(document.createTextNode(text.slice(lastIndex)));
           }
         };
-        const isUnlocked = (item, codes) => {
-          if (!item?.hidden) {
+
+        const matchItem = (item, tokens) => {
+          if (scopeSelect.value !== "all" && item.type !== scopeSelect.value) {
+            return false;
+          }
+
+          if (tokens.length === 0) {
             return true;
           }
-          const code = normalizeCode(item.unlockCode);
-          return Boolean(code && codes.has(code));
+
+          const baseText = [item.title, item.description, item.metaLabel, ...(item.tags || []), ...(item.chips || [])]
+            .join("\n")
+            .toLowerCase();
+          const bodyText = includeBody.checked && item.bodySearchable ? `\n${String(item.body || "").toLowerCase()}` : "";
+          const fullText = `${baseText}${bodyText}`;
+          return tokens.every((token) => fullText.includes(token));
         };
 
-        const normalize = (value) => value.toLowerCase().replace(/\s+/g, " ").trim();
-        const tokenize = (value) => normalize(value).split(" ").filter(Boolean);
-        const stripMarkdown = (value) =>
-          value
-            .replace(/```[\s\S]*?```/g, " ")
-            .replace(/`[^`]*`/g, " ")
-            .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
-            .replace(/\[[^\]]+\]\([^)]+\)/g, " ")
-            .replace(/[#>*_~|]/g, " ")
-            .replace(/-{2,}/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
-
-        const indexed = payload
-          .map((raw) => {
-            const title = typeof raw.title === "string" ? raw.title : "";
-            const description = typeof raw.description === "string" ? raw.description : "";
-            const plainBody = stripMarkdown(typeof raw.body === "string" ? raw.body : "");
-            const tags = Array.isArray(raw.tags) ? raw.tags.filter((tag) => typeof tag === "string") : [];
-
-            return {
-              ...raw,
-              title,
-              description,
-              tags,
-              plainBody,
-              normalizedTitle: normalize(title),
-              normalizedDescription: normalize(description),
-              normalizedTags: tags.map((tag) => normalize(tag)),
-              normalizedBody: normalize(plainBody),
-              timestamp: Number(raw.timestamp) || 0
-            };
-          })
-          .sort((a, b) => b.timestamp - a.timestamp);
-
-        const getVisibleIndexed = () => {
-          const codes = getStoredCodes();
-          return indexed.filter((item) => isUnlocked(item, codes));
-        };
-
-        const state = {
-          query: "",
-          includeBody: true
-        };
-
-        const buildSnippet = (item, tokens) => {
-          if (item.description) {
-            return item.description;
-          }
-
-          if (!item.plainBody) {
-            return "暂无摘要。";
-          }
-
-          if (tokens.length === 0) {
-            return item.plainBody.slice(0, 130);
-          }
-
-          const firstMatch = tokens
-            .map((token) => item.normalizedBody.indexOf(token))
-            .filter((index) => index >= 0)
-            .sort((a, b) => a - b)[0];
-
-          const start = typeof firstMatch === "number" ? Math.max(0, firstMatch - 28) : 0;
-          const end = start + 130;
-          const prefix = start > 0 ? "..." : "";
-          const suffix = end < item.plainBody.length ? "..." : "";
-          return `${prefix}${item.plainBody.slice(start, end).trim()}${suffix}`;
-        };
-
-        const scoreByTokens = (item, tokens) => {
-          if (tokens.length === 0) {
-            return 0;
-          }
-
-          let score = 0;
-
-          for (const token of tokens) {
-            let tokenScore = 0;
-            if (item.normalizedTitle.includes(token)) {
-              tokenScore += 9;
-            }
-            if (item.normalizedDescription.includes(token)) {
-              tokenScore += 6;
-            }
-            if (item.normalizedTags.some((tag) => tag.includes(token))) {
-              tokenScore += 5;
-            }
-            if (state.includeBody && item.normalizedBody.includes(token)) {
-              tokenScore += 2;
-            }
-
-            if (tokenScore === 0) {
-              return null;
-            }
-
-            score += tokenScore;
-          }
-
-          return score;
-        };
-
-        const createResultNode = (item, snippet) => {
+        const renderItem = (item, tokens) => {
           const card = document.createElement("article");
           card.className = "surface search-result";
 
+          const head = document.createElement("div");
+          head.className = "search-result-head";
+
           const meta = document.createElement("p");
           meta.className = "search-meta";
-          const published = document.createElement("time");
-          published.dateTime = item.dateISO;
-          published.textContent = item.dateLabel || "";
-          meta.append(published);
-          if (item.updatedLabel) {
-            const updated = document.createElement("span");
-            updated.textContent = `更新于 ${item.updatedLabel}`;
-            meta.append(updated);
-          }
+          const metaLabel = document.createElement("span");
+          metaLabel.textContent = item.metaLabel;
+          const dateLabel = document.createElement("span");
+          dateLabel.textContent = item.dateLabel;
+          meta.append(metaLabel, dateLabel);
+
+          const action = document.createElement("a");
+          action.className = "search-action";
+          action.href = item.href;
+          action.textContent = item.actionLabel || (item.type === "project" ? "查看项目" : "阅读全文");
+          head.append(meta, action);
+
+          const body = document.createElement("div");
+          body.className = "search-result-body";
 
           const title = document.createElement("h2");
           title.className = "search-title";
-          const titleLink = document.createElement("a");
-          titleLink.href = item.href || "#";
-          titleLink.textContent = item.title || "未命名文章";
-          title.append(titleLink);
+          const link = document.createElement("a");
+          link.href = item.href;
+          appendHighlightedText(link, item.title, tokens);
+          title.append(link);
 
           const desc = document.createElement("p");
           desc.className = "muted search-desc";
-          desc.textContent = snippet;
+          appendHighlightedText(desc, item.description || "暂无摘要。", tokens);
 
-          card.append(meta, title, desc);
+          body.append(title, desc);
+          card.append(head, body);
 
-          if (Array.isArray(item.tags) && item.tags.length > 0) {
-            const tags = document.createElement("div");
-            tags.className = "search-tags";
-            for (const tag of item.tags) {
-              const tagLink = document.createElement("a");
-              tagLink.className = "search-tag";
-              tagLink.href = `${tagBaseHref}${encodeURIComponent(tag)}/`;
-              tagLink.textContent = `#${tag}`;
-              tags.append(tagLink);
+          if (Array.isArray(item.chips) && item.chips.length > 0) {
+            const chips = document.createElement("div");
+            chips.className = "search-tags";
+            for (const chipText of item.chips) {
+              const chip = document.createElement("span");
+              chip.className = "search-tag";
+              chip.textContent = chipText;
+              chips.append(chip);
             }
-            card.append(tags);
+            card.append(chips);
           }
 
           return card;
         };
 
         const render = () => {
-          const query = state.query.trim();
-          const tokens = tokenize(query);
-          const visibleIndexed = getVisibleIndexed();
-
-          const matched = tokens.length
-            ? visibleIndexed
-                .map((item) => {
-                  const score = scoreByTokens(item, tokens);
-                  if (score === null) {
-                    return null;
-                  }
-                  return { item, score };
-                })
-                .filter((item) => item !== null)
-                .sort((left, right) => right.score - left.score || right.item.timestamp - left.item.timestamp)
-                .slice(0, 60)
-            : visibleIndexed.slice(0, 12).map((item) => ({ item, score: 0 }));
+          const tokens = tokenize(input.value);
+          const sourceItems = payload.items;
+          const filtered = sourceItems.filter((item) => matchItem(item, tokens));
 
           output.replaceChildren();
 
-          if (matched.length === 0) {
+          if (filtered.length === 0) {
             const empty = document.createElement("p");
             empty.className = "surface search-empty muted";
-            empty.textContent = "没有匹配结果，试试缩短关键词或取消正文匹配限制。";
+            empty.textContent = tokens.length
+              ? "没有匹配结果。试试减少关键词、切换文章/项目范围，或关闭“包含正文匹配”。"
+              : "暂无可展示内容，稍后再来看看。";
             output.append(empty);
           } else {
-            for (const entry of matched) {
-              output.append(createResultNode(entry.item, buildSnippet(entry.item, tokens)));
+            for (const item of filtered) {
+              output.append(renderItem(item, tokens));
             }
           }
 
-          if (tokens.length === 0) {
-            summary.textContent = `输入关键词开始搜索。当前展示最新 ${matched.length} 篇文章。`;
-          } else {
-            summary.textContent = `关键词 "${query}" 匹配 ${matched.length} 篇文章（按相关度排序）。`;
-          }
+          summary.textContent = tokens.length
+            ? `找到 ${filtered.length} 条结果；当前范围：${scopeSelect.options[scopeSelect.selectedIndex]?.text || "全部"}。`
+            : `当前展示全部 ${filtered.length} 条内容；输入关键词后会实时筛选标题、摘要、标签和正文。`;
         };
 
-        const syncUrlQuery = () => {
-          const url = new URL(window.location.href);
-          if (state.query.trim()) {
-            url.searchParams.set("q", state.query.trim());
-          } else {
-            url.searchParams.delete("q");
-          }
-          history.replaceState(null, "", url.toString());
-        };
-
-        input.addEventListener("input", () => {
-          state.query = input.value;
-          syncUrlQuery();
-          render();
-        });
-
-        includeBodyCheckbox.addEventListener("change", () => {
-          state.includeBody = includeBodyCheckbox.checked;
-          render();
-        });
-
+        input.addEventListener("input", render);
+        scopeSelect.addEventListener("change", render);
+        includeBody.addEventListener("change", render);
         clearButton.addEventListener("click", () => {
-          state.query = "";
           input.value = "";
-          syncUrlQuery();
+          scopeSelect.value = "all";
+          includeBody.checked = true;
           render();
           input.focus();
         });
 
         document.addEventListener("keydown", (event) => {
-          if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) {
-            return;
-          }
+          const activeElement = document.activeElement;
+          const isFormTarget =
+            activeElement instanceof HTMLElement &&
+            (activeElement.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(activeElement.tagName));
 
-          const target = event.target;
-          if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-            return;
-          }
-
-          event.preventDefault();
-          input.focus();
-        });
-
-        const initialQuery = new URLSearchParams(window.location.search).get("q");
-        if (initialQuery) {
-          state.query = initialQuery;
-          input.value = initialQuery;
-        }
-
-        window.addEventListener("unlock:changed", render);
-        window.addEventListener("storage", (event) => {
-          if (event.key === STORAGE_KEY) {
-            render();
+          if (event.key === "/" && !isFormTarget && document.activeElement !== input) {
+            event.preventDefault();
+            input.focus();
+            input.select();
           }
         });
 
@@ -406,28 +330,29 @@ const searchItems = posts.map((post) => {
 </BaseLayout>
 
 <style>
-  .search-page {
-    gap: 1.15rem;
+  .search-page,
+  .search-results {
+    gap: 1rem;
   }
 
-  .search-head {
+  .search-head,
+  .search-panel,
+  .search-result,
+  .search-empty {
     display: grid;
-    gap: 0.6rem;
+    gap: 0.78rem;
   }
 
-  .search-panel {
-    border-radius: var(--radius-lg);
-    border-color: rgba(218, 205, 184, 0.9);
-    padding: 1rem;
-    display: grid;
-    gap: 0.82rem;
+  .search-head-note {
+    margin: 0;
+    max-width: 66ch;
   }
 
   .search-row {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
     gap: 0.62rem;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
   }
 
   .search-label {
@@ -438,7 +363,8 @@ const searchItems = posts.map((post) => {
     font-family: "IBM Plex Mono", monospace;
   }
 
-  .search-row input {
+  .search-row input,
+  .search-row select {
     width: 100%;
     min-height: 2.4rem;
     border-radius: 12px;
@@ -453,7 +379,8 @@ const searchItems = posts.map((post) => {
     color: var(--text-soft);
   }
 
-  .search-row input:focus-visible {
+  .search-row input:focus-visible,
+  .search-row select:focus-visible {
     border-color: rgba(31, 120, 117, 0.52);
   }
 
@@ -467,16 +394,6 @@ const searchItems = posts.map((post) => {
     font-weight: 600;
     padding: 0.2rem 0.76rem;
     cursor: pointer;
-    transition:
-      transform 220ms var(--ease-out),
-      border-color 220ms var(--ease-out),
-      background 220ms var(--ease-out);
-  }
-
-  .search-clear:hover {
-    transform: translateY(-1px);
-    border-color: rgba(31, 120, 117, 0.5);
-    background: rgba(31, 120, 117, 0.16);
   }
 
   .search-actions {
@@ -500,9 +417,11 @@ const searchItems = posts.map((post) => {
     accent-color: var(--accent-cyan);
   }
 
-  .search-tip {
+  .search-tip,
+  .search-summary,
+  .search-meta,
+  .search-desc {
     margin: 0;
-    font-size: 0.84rem;
   }
 
   .search-tip kbd {
@@ -514,90 +433,170 @@ const searchItems = posts.map((post) => {
     color: var(--text);
   }
 
-  .search-summary {
-    margin: 0;
-    font-size: 0.9rem;
+  .search-result,
+  .search-empty {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border-radius: 28px;
+    border: 1px solid rgba(45, 59, 75, 0.92);
+    padding: 1.1rem 1.1rem 1.15rem;
+    background:
+      radial-gradient(circle at 100% 0%, rgba(86, 198, 194, 0.14), transparent 28%),
+      radial-gradient(circle at 0% 0%, rgba(241, 141, 85, 0.08), transparent 22%),
+      linear-gradient(160deg, rgba(18, 28, 39, 0.96), rgba(12, 19, 28, 0.98));
+    box-shadow:
+      0 18px 38px rgba(0, 0, 0, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      box-shadow 220ms var(--ease-out),
+      background 220ms var(--ease-out);
   }
 
-  .search-results {
-    gap: 0.86rem;
+  .search-result:hover,
+  .search-result:focus-within {
+    transform: translateY(-4px);
+    border-color: rgba(86, 198, 194, 0.32);
+    box-shadow:
+      0 26px 54px rgba(0, 0, 0, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
-  .search-result {
-    border-radius: 16px;
-    border-color: rgba(218, 205, 184, 0.9);
-    padding: 0.96rem;
-    display: grid;
-    gap: 0.52rem;
+  .search-result::before,
+  .search-empty::before {
+    content: "";
+    position: absolute;
+    top: 0.95rem;
+    left: 1rem;
+    right: 1rem;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(86, 198, 194, 0.32), rgba(241, 141, 85, 0.22), transparent);
+    opacity: 0.8;
+    pointer-events: none;
   }
 
   .search-meta {
-    margin: 0;
-    font-size: 0.76rem;
-    color: var(--text-soft);
+    font-size: 0.72rem;
+    color: #9cb1cc;
     display: flex;
     gap: 0.52rem;
     flex-wrap: wrap;
     font-family: "IBM Plex Mono", monospace;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
+    margin: 0;
+  }
+
+  .search-meta span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.8rem;
+    border-radius: 999px;
+    padding: 0.18rem 0.58rem;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: rgba(148, 163, 184, 0.1);
+  }
+
+  .search-result-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+
+  .search-result-body {
+    display: grid;
+    gap: 0.62rem;
+  }
+
+  .search-result-head {
+    align-items: flex-start;
   }
 
   .search-title {
     margin: 0;
-    font-size: 1.14rem;
-    line-height: 1.35;
+    font-size: 1.22rem;
+    line-height: 1.24;
     font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+    letter-spacing: -0.03em;
   }
 
   .search-title a {
-    color: var(--text);
+    color: #eef5ff;
   }
 
   .search-title a:hover {
-    color: var(--accent);
+    color: #ffb78f;
   }
 
   .search-desc {
-    margin: 0;
-    font-size: 0.93rem;
-    line-height: 1.5;
+    color: #bfd0e4;
+    line-height: 1.68;
+  }
+
+  .search-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.1rem;
+    border-radius: 999px;
+    padding: 0.34rem 0.78rem;
+    border: 1px solid rgba(86, 198, 194, 0.3);
+    background: rgba(86, 198, 194, 0.1);
+    color: var(--accent-cyan-soft);
+    font-size: 0.74rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out);
+  }
+
+  .search-action:hover {
+    transform: translateY(-2px);
+    border-color: rgba(86, 198, 194, 0.48);
+    background: rgba(86, 198, 194, 0.16);
+    color: var(--accent-cyan-soft);
   }
 
   .search-tags {
     display: flex;
     flex-wrap: wrap;
     gap: 0.42rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.14);
   }
 
   .search-tag {
     border-radius: 999px;
-    border: 1px solid rgba(31, 120, 117, 0.3);
-    background: rgba(31, 120, 117, 0.08);
-    color: var(--accent-cyan);
-    font-size: 0.76rem;
-    padding: 0.14rem 0.5rem;
+    border: 1px solid rgba(86, 198, 194, 0.26);
+    background: rgba(86, 198, 194, 0.1);
+    color: var(--accent-cyan-soft);
+    font-size: 0.72rem;
+    padding: 0.18rem 0.54rem;
     line-height: 1.2;
-    transition:
-      border-color 220ms var(--ease-out),
-      background 220ms var(--ease-out);
   }
 
-  .search-tag:hover {
-    border-color: rgba(31, 120, 117, 0.48);
-    background: rgba(31, 120, 117, 0.14);
-    color: var(--accent-cyan);
-  }
-
-  .search-empty {
-    border-radius: 16px;
-    padding: 1rem;
-    margin: 0;
+  .search-result mark,
+  .search-empty mark {
+    background: rgba(241, 141, 85, 0.24);
+    color: inherit;
+    border-radius: 0.28rem;
+    padding: 0 0.14rem;
   }
 
   @media (max-width: 760px) {
     .search-row {
       grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+
+    .search-result-head {
       align-items: stretch;
     }
 
@@ -608,32 +607,36 @@ const searchItems = posts.map((post) => {
     .search-clear {
       width: fit-content;
     }
+
+    .search-action {
+      width: fit-content;
+    }
   }
 
-  :global(html[data-theme="dark"]) .search-panel,
-  :global(html[data-theme="dark"]) .search-result {
-    border-color: rgba(45, 59, 75, 0.95);
+  @media (min-width: 900px) {
+    .search-results {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      align-items: start;
+    }
   }
 
-  :global(html[data-theme="dark"]) .search-row input {
+  :global(html[data-theme="dark"]) .search-row input,
+  :global(html[data-theme="dark"]) .search-row select {
     border-color: rgba(45, 59, 75, 0.95);
     background: rgba(16, 24, 34, 0.84);
-    color: var(--text);
   }
 
-  :global(html[data-theme="dark"]) .search-row input:focus-visible {
-    border-color: rgba(86, 198, 194, 0.56);
+  :global(html[data-theme="dark"]) .search-result,
+  :global(html[data-theme="dark"]) .search-empty {
+    border-color: rgba(45, 59, 75, 0.95);
   }
 
-  :global(html[data-theme="dark"]) .search-clear {
-    border-color: rgba(86, 198, 194, 0.4);
+  :global(html[data-theme="dark"]) .search-clear,
+  :global(html[data-theme="dark"]) .search-tag {
+    border-color: rgba(86, 198, 194, 0.34);
     background: rgba(86, 198, 194, 0.12);
     color: var(--accent-cyan-soft);
-  }
-
-  :global(html[data-theme="dark"]) .search-clear:hover {
-    border-color: rgba(86, 198, 194, 0.54);
-    background: rgba(86, 198, 194, 0.2);
   }
 
   :global(html[data-theme="dark"]) .search-tip kbd {
@@ -642,15 +645,42 @@ const searchItems = posts.map((post) => {
     color: var(--text);
   }
 
-  :global(html[data-theme="dark"]) .search-tag {
-    border-color: rgba(86, 198, 194, 0.34);
-    background: rgba(86, 198, 194, 0.12);
-    color: var(--accent-cyan-soft);
+  :global(html[data-theme="light"]) .search-result,
+  :global(html[data-theme="light"]) .search-empty {
+    border-color: rgba(214, 202, 184, 0.82);
+    background:
+      radial-gradient(circle at 100% 0%, rgba(31, 120, 117, 0.1), transparent 28%),
+      radial-gradient(circle at 0% 0%, rgba(196, 82, 55, 0.08), transparent 22%),
+      linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(247, 243, 236, 0.95));
+    box-shadow:
+      0 18px 38px rgba(27, 24, 18, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.84);
   }
 
-  :global(html[data-theme="dark"]) .search-tag:hover {
-    border-color: rgba(86, 198, 194, 0.52);
-    background: rgba(86, 198, 194, 0.2);
-    color: var(--accent-cyan-soft);
+  :global(html[data-theme="light"]) .search-title a {
+    color: var(--text);
+  }
+
+  :global(html[data-theme="light"]) .search-desc,
+  :global(html[data-theme="light"]) .search-meta {
+    color: var(--text-soft);
+  }
+
+  :global(html[data-theme="light"]) .search-meta span {
+    border-color: rgba(100, 116, 139, 0.18);
+    background: rgba(100, 116, 139, 0.08);
+    color: var(--text-soft);
+  }
+
+  :global(html[data-theme="light"]) .search-action {
+    border-color: rgba(31, 120, 117, 0.24);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+  }
+
+  :global(html[data-theme="light"]) .search-tag {
+    border-color: rgba(31, 120, 117, 0.24);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
   }
 </style>

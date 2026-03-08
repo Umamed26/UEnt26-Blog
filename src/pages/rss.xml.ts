@@ -4,7 +4,7 @@ import { getAllPublishedPosts } from "@/utils/posts";
 import { withBasePath } from "@/utils/paths";
 
 export async function GET(context: { site?: URL }) {
-  const posts = await getAllPublishedPosts({ includeHidden: true });
+  const posts = await getAllPublishedPosts();
 
   return rss({
     title: siteConfig.title,

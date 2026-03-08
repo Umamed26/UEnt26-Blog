@@ -17,13 +17,12 @@ export type SiteConfig = {
 
 export const siteConfig: SiteConfig = {
   title: "UEnt26 Blog",
-  description: "纯前端个人博客。专注游戏和科技。",
+  description: "技术写作、游戏项目与个人实验的混合型个人站。",
   siteUrl: import.meta.env.SITE_URL ?? "https://example.com",
   author: "UEnt26",
   accentColor: "#c45237",
   socialLinks: [
-    { label: "GitHub", href: "https://github.com/" },
-    { label: "RSS", href: "/rss.xml" }
+    { label: "GitHub", href: "https://github.com/Umamed26/UEnt26-Blog" }
   ],
   postsPerPage: 6,
   featuredCount: 3,

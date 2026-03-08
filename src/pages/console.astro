@@ -1,9 +1,9 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { getAllPublishedPosts, getPostTags, normalizeUnlockCode } from "@/utils/posts";
+import { getAllPublishedPosts, getPostTags } from "@/utils/posts";
 import { withBasePath } from "@/utils/paths";
 
-const posts = await getAllPublishedPosts({ includeHidden: true });
+const posts = await getAllPublishedPosts();
 const consolePosts = posts.map((post) => {
   const updatedDate = post.data.updatedDate;
   return {
@@ -16,12 +16,9 @@ const consolePosts = posts.map((post) => {
     updatedLabel: updatedDate ? updatedDate.toLocaleDateString("zh-CN") : null,
     timestamp: post.data.pubDate.getTime(),
     tags: getPostTags(post),
-    body: post.body,
-    hidden: post.data.hidden,
-    unlockCode: normalizeUnlockCode(post.data.unlockCode)
+    body: post.body
   };
 });
-const visibleConsolePosts = consolePosts.filter((post) => !post.hidden);
 ---
 
 <BaseLayout title="控制台">
@@ -77,7 +74,7 @@ const visibleConsolePosts = consolePosts.filter((post) => !post.hidden);
       <div class="surface noscript-fallback">
         <p class="muted">已关闭 JavaScript，以下展示静态文章列表：</p>
         <ul>
-          {visibleConsolePosts.map((post) => (
+          {consolePosts.map((post) => (
             <li>
               <a href={post.href}>{post.title}</a>
             </li>
@@ -140,16 +137,7 @@ const visibleConsolePosts = consolePosts.filter((post) => !post.hidden);
           } catch {}
         };
 
-        const isUnlocked = (post, codes) => {
-          if (!post?.hidden) {
-            return true;
-          }
-          const code = normalizeCode(post.unlockCode);
-          return Boolean(code && codes.has(code));
-        };
-
-        let unlockedCodes = getStoredCodes();
-        let visiblePosts = allPosts.filter((post) => isUnlocked(post, unlockedCodes));
+        let visiblePosts = [...allPosts];
 
         const PAGE_SIZE = 5;
         const state = {
@@ -236,12 +224,6 @@ const visibleConsolePosts = consolePosts.filter((post) => !post.hidden);
           updateStatus();
         };
 
-        const refreshVisiblePosts = () => {
-          unlockedCodes = getStoredCodes();
-          visiblePosts = allPosts.filter((post) => isUnlocked(post, unlockedCodes));
-          applyFilters();
-        };
-
         const attemptUnlock = (rawInput) => {
           const code = normalizeCode(rawInput);
           if (!code) {
@@ -249,26 +231,16 @@ const visibleConsolePosts = consolePosts.filter((post) => !post.hidden);
             return true;
           }
 
-          const matches = allPosts.filter(
-            (post) => post.hidden && normalizeCode(post.unlockCode) === code
-          );
-
-          if (matches.length === 0) {
-            appendLine("解锁码无效。", "error");
+          const storedCodes = getStoredCodes();
+          if (storedCodes.has(code)) {
+            appendLine("该解锁码已经记住。", "meta");
             return true;
           }
 
-          if (unlockedCodes.has(code)) {
-            appendLine("该解锁码已生效。", "meta");
-            return true;
-          }
-
-          unlockedCodes.add(code);
-          setStoredCodes(unlockedCodes);
-          refreshVisiblePosts();
-          appendLine(`解锁成功，已解锁 ${matches.length} 篇文章。`, "meta");
+          storedCodes.add(code);
+          setStoredCodes(storedCodes);
+          appendLine("已记住解锁码。回到彩蛋文章页时会自动尝试解锁。", "meta");
           window.dispatchEvent(new CustomEvent("unlock:changed"));
-          printList();
           return true;
         };
 
@@ -386,7 +358,7 @@ const visibleConsolePosts = consolePosts.filter((post) => !post.hidden);
           appendLine("cat/view <序号|slug>          read 命令别名", "meta");
           appendLine("search <关键词>               标题/摘要/标签搜索", "meta");
           appendLine("tag <标签>                    按标签过滤，如 tag astro", "meta");
-          appendLine("unlock <解锁码>               解锁隐藏文章（直接输入解锁码也可）", "meta");
+          appendLine("unlock <解锁码>               在当前浏览器记住一个解锁码", "meta");
           appendLine("count                         查看当前匹配统计", "meta");
           appendLine("reset                         清空筛选并回到第一页", "meta");
           appendLine("clear                         清空屏幕输出", "meta");
@@ -527,16 +499,9 @@ const visibleConsolePosts = consolePosts.filter((post) => !post.hidden);
           });
         }
 
-        window.addEventListener("storage", (event) => {
-          if (event.key === STORAGE_KEY) {
-            refreshVisiblePosts();
-            printList();
-          }
-        });
-
         applyFilters();
         appendLine(
-          `Console ready. 已载入 ${allPosts.length} 篇文章，当前可见 ${visiblePosts.length} 篇。`,
+          `Console ready. 已载入 ${allPosts.length} 篇文章。`,
           "meta"
         );
         appendLine("输入 help 查看命令，输入 list 浏览第一页。", "meta");

@@ -57,13 +57,17 @@ const { tag, posts, currentPage, totalPages, totalCount } = Astro.props as Props
   canonicalPath={`/tags/${tagToUrlSegment(tag)}/page/${currentPage}/`}
 >
   <section class="stack tag-page" data-reveal>
-    <div>
+    <header class="surface tag-hero">
       <p class="section-kicker">Tag Feed</p>
       <h1 class="page-title">#{tag}</h1>
-    </div>
-    <p class="muted">
-      共 {totalCount} 篇文章，第 {currentPage} / {totalPages} 页
-    </p>
+      <p class="muted intro">这个主题下的文章都在这里，也包含需要解锁阅读的彩蛋内容。</p>
+      <div class="tag-hero-meta">
+        <span class="tag-meta-chip">
+          共 {totalCount} 篇 · 第 {currentPage} / {totalPages} 页
+        </span>
+        <a class="tag-back-link" href={`/tags/${tagToUrlSegment(tag)}/`}>返回标签首页</a>
+      </div>
+    </header>
 
     <div class="post-grid">
       {posts.map((post) => (
@@ -83,5 +87,65 @@ const { tag, posts, currentPage, totalPages, totalCount } = Astro.props as Props
 <style>
   .tag-page {
     gap: 1.05rem;
+  }
+
+  .tag-hero {
+    display: grid;
+    gap: 0.85rem;
+    padding: clamp(1rem, 2vw, 1.25rem);
+    border-radius: var(--radius-lg);
+  }
+
+  .intro {
+    margin: 0;
+    max-width: 62ch;
+  }
+
+  .tag-hero-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+  }
+
+  .tag-meta-chip,
+  .tag-back-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.1rem;
+    border-radius: 999px;
+    padding: 0.28rem 0.76rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .tag-meta-chip {
+    border: 1px solid rgba(100, 116, 139, 0.24);
+    background: rgba(100, 116, 139, 0.08);
+    color: var(--text-soft);
+  }
+
+  .tag-back-link {
+    border: 1px solid rgba(31, 120, 117, 0.3);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+  }
+
+  .tag-back-link:hover {
+    border-color: rgba(31, 120, 117, 0.46);
+    background: rgba(31, 120, 117, 0.14);
+    color: var(--accent-cyan);
+  }
+
+  :global(html[data-theme="dark"]) .tag-meta-chip {
+    border-color: rgba(100, 116, 139, 0.42);
+    background: rgba(100, 116, 139, 0.18);
+    color: #d2dae7;
+  }
+
+  :global(html[data-theme="dark"]) .tag-back-link {
+    border-color: rgba(86, 198, 194, 0.34);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
   }
 </style>

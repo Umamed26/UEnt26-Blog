@@ -1,44 +1,29 @@
 ---
+import { render } from "astro:content";
+import CodeBlockWrapper from "@/components/CodeBlockWrapper.astro";
 import BaseLayout from "@/layouts/BaseLayout.astro";
+import { withBasePath } from "@/utils/paths";
+import { getCurrentNowEntry, getCurrentNowSnapshot } from "@/utils/now";
 
-const updatedAt = new Date().toLocaleDateString("zh-CN");
-
-const focusItems = [
-  {
-    title: "内容重心",
-    detail: "偶尔做点相关内容。"
-  },
-  {
-    title: "写东西",
-    detail: "慢慢写。"
-  },
-  {
-    title: "做东西",
-    detail: "慢慢做。"
-  }
-];
-
-const nowList = [
-  "优化移动端可读性。"
-];
-
-const nextList = [
-  "不知道哇。"
-];
+const nowEntry = await getCurrentNowEntry();
+const nowSnapshot = await getCurrentNowSnapshot();
+const updatedAt = nowSnapshot.updatedDate.toLocaleDateString("zh-CN");
+const renderedNow = nowEntry ? await render(nowEntry) : undefined;
+const Content = renderedNow?.Content;
 ---
 
 <BaseLayout title="Now">
   <section class="stack now-page" data-reveal>
     <header class="surface now-hero">
       <p class="section-kicker">Now</p>
-      <h1 class="page-title">我现在在做什么</h1>
+      <h1 class="page-title">{nowSnapshot.title}</h1>
       <p class="muted">
-        这个页面记录近期关注点和下一步计划。最后更新：{updatedAt}。
+        {nowSnapshot.description} 最后更新：{updatedAt}。
       </p>
     </header>
 
     <section class="focus-grid" data-reveal style="--reveal-delay: 70ms;">
-      {focusItems.map((item) => (
+      {nowSnapshot.focusItems.map((item) => (
         <article class="surface focus-card">
           <h2>{item.title}</h2>
           <p class="muted">{item.detail}</p>
@@ -46,22 +31,44 @@ const nextList = [
       ))}
     </section>
 
-    <section class="stack section-wrap" data-reveal style="--reveal-delay: 110ms;">
-      <h2 class="section-title">正在推进</h2>
-      <ul class="now-list">
-        {nowList.map((item) => (
-          <li>{item}</li>
-        ))}
-      </ul>
+    <section class="content-grid" data-reveal style="--reveal-delay: 110ms;">
+      <section class="stack section-wrap">
+        <h2 class="section-title">最近在更新</h2>
+        <ul class="now-list">
+          {nowSnapshot.currentItems.map((item) => (
+            <li>{item}</li>
+          ))}
+        </ul>
+      </section>
+
+      <section class="stack section-wrap">
+        <h2 class="section-title">接下来会补</h2>
+        <ul class="now-list">
+          {nowSnapshot.nextItems.map((item) => (
+            <li>{item}</li>
+          ))}
+        </ul>
+      </section>
     </section>
 
-    <section class="stack section-wrap" data-reveal style="--reveal-delay: 150ms;">
-      <h2 class="section-title">接下来</h2>
-      <ul class="now-list">
-        {nextList.map((item) => (
-          <li>{item}</li>
+    {Content && (
+      <section class="surface note-card" data-reveal style="--reveal-delay: 140ms;">
+        <p class="section-kicker">Why This Page</p>
+        <h2 class="section-title">为什么值得看这页</h2>
+        <CodeBlockWrapper>
+          <Content />
+        </CodeBlockWrapper>
+      </section>
+    )}
+
+    <section class="surface quick-links" data-reveal style="--reveal-delay: 170ms;">
+      <p class="section-kicker">Start Here</p>
+      <h2 class="section-title">接着逛</h2>
+      <div class="link-row">
+        {nowSnapshot.quickLinks.map((item) => (
+          <a href={withBasePath(item.href)}>{item.label}</a>
         ))}
-      </ul>
+      </div>
     </section>
   </section>
 </BaseLayout>
@@ -71,26 +78,32 @@ const nextList = [
     gap: 1rem;
   }
 
-  .now-hero {
+  .now-hero,
+  .focus-card,
+  .section-wrap,
+  .quick-links,
+  .note-card {
     padding: 1.2rem;
     border-radius: var(--radius-lg);
+  }
+
+  .now-hero {
     display: grid;
     gap: 0.7rem;
   }
 
-  .now-hero p {
+  .now-hero p,
+  .focus-card p {
     margin: 0;
   }
 
-  .focus-grid {
+  .focus-grid,
+  .content-grid {
     display: grid;
     gap: 0.8rem;
   }
 
   .focus-card {
-    padding: 0.95rem;
-    border-radius: 16px;
-    border-color: rgba(218, 205, 184, 0.9);
     display: grid;
     gap: 0.46rem;
   }
@@ -102,16 +115,9 @@ const nextList = [
     line-height: 1.3;
   }
 
-  .focus-card p {
-    margin: 0;
-    font-size: 0.92rem;
-    line-height: 1.54;
-  }
-
-  .section-wrap {
+  .section-wrap,
+  .note-card {
     border: 1px solid rgba(218, 205, 184, 0.9);
-    border-radius: 16px;
-    padding: 1rem;
     background: rgba(255, 255, 255, 0.42);
   }
 
@@ -119,26 +125,66 @@ const nextList = [
     margin: 0;
     padding-left: 1.15rem;
     display: grid;
-    gap: 0.5rem;
+    gap: 0.52rem;
   }
 
   .now-list li {
     color: var(--text);
-    line-height: 1.55;
+    line-height: 1.58;
+  }
+
+  .quick-links {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .link-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .link-row a {
+    border-radius: 999px;
+    border: 1px solid rgba(31, 120, 117, 0.3);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+    padding: 0.28rem 0.72rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .link-row a:hover {
+    border-color: rgba(31, 120, 117, 0.48);
+    background: rgba(31, 120, 117, 0.14);
+    color: var(--accent-cyan);
   }
 
   @media (min-width: 860px) {
     .focus-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
+
+    .content-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   :global(html[data-theme="dark"]) .focus-card,
-  :global(html[data-theme="dark"]) .section-wrap {
+  :global(html[data-theme="dark"]) .section-wrap,
+  :global(html[data-theme="dark"]) .quick-links,
+  :global(html[data-theme="dark"]) .note-card {
     border-color: rgba(45, 59, 75, 0.95);
   }
 
-  :global(html[data-theme="dark"]) .section-wrap {
+  :global(html[data-theme="dark"]) .section-wrap,
+  :global(html[data-theme="dark"]) .note-card {
     background: rgba(16, 24, 34, 0.46);
+  }
+
+  :global(html[data-theme="dark"]) .link-row a {
+    border-color: rgba(86, 198, 194, 0.34);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
   }
 </style>

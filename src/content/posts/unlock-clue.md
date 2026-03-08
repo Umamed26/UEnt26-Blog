@@ -2,6 +2,9 @@
 title: "解锁线索：ALPHA-42"
 description: "一段公开文章，包含隐藏文章的解锁码。"
 pubDate: 2026-03-05
+category: "meta"
+series: "unlock-demo"
+project: "uent26-blog"
 tags:
   - unlock
   - guide
@@ -15,4 +18,4 @@ toc: true
 
 `unlock ALPHA-42`
 
-然后返回归档或搜索页面，就能看到隐藏文章。
+然后返回对应的隐藏文章页，就能解锁并阅读正文。

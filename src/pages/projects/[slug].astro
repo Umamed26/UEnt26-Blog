@@ -1,0 +1,241 @@
+---
+import { render } from "astro:content";
+import CodeBlockWrapper from "@/components/CodeBlockWrapper.astro";
+import PostCard from "@/components/PostCard.astro";
+import { getProjectStatusLabel } from "@/config/taxonomy";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { withBasePath } from "@/utils/paths";
+import { getAllPublishedPosts, getPostsByProject, type PostEntry } from "@/utils/posts";
+import { getAllProjects, type ProjectEntry } from "@/utils/projects";
+
+type Props = {
+  project: ProjectEntry;
+};
+
+export async function getStaticPaths() {
+  const projects = await getAllProjects();
+  return projects.map((project) => ({
+    params: { slug: project.slug },
+    props: { project }
+  }));
+}
+
+const { project } = Astro.props as Props;
+const { Content } = await render(project);
+const allPosts = await getAllPublishedPosts();
+const relatedPosts: PostEntry[] = getPostsByProject(allPosts, project.slug).slice(0, 4);
+const canonicalPath = `/projects/${project.slug}/`;
+---
+
+<BaseLayout title={project.data.title} description={project.data.summary} canonicalPath={canonicalPath}>
+  <article class="stack project-detail">
+    <header class="surface hero" data-reveal>
+      <p class="section-kicker">Project Detail</p>
+      <h1 class="page-title">{project.data.title}</h1>
+      <p class="muted summary">{project.data.summary}</p>
+      <div class="meta-row">
+        <span class="meta-pill">{getProjectStatusLabel(project.data.status)}</span>
+        {project.data.updatedDate && (
+          <span class="meta-pill meta-pill-soft">更新于 {project.data.updatedDate.toLocaleDateString("zh-CN")}</span>
+        )}
+        <a class="meta-pill meta-pill-link" href={withBasePath("/projects/")}>返回项目索引</a>
+      </div>
+    </header>
+
+    <section class="detail-layout" data-reveal style="--reveal-delay: 70ms;">
+      <div class="stack main-column">
+        <section class="surface prose-card">
+          <CodeBlockWrapper>
+            <Content />
+          </CodeBlockWrapper>
+        </section>
+
+        {relatedPosts.length > 0 && (
+          <section class="stack related-section">
+            <div>
+              <p class="section-kicker">Project Log</p>
+              <h2 class="section-title">相关文章</h2>
+            </div>
+            <div class="related-grid">
+              {relatedPosts.map((post) => (
+                <PostCard post={post} />
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+
+      <aside class="stack sidebar">
+        {project.data.stack.length > 0 && (
+          <section class="surface sidebar-card">
+            <p class="section-kicker">Stack</p>
+            <h2 class="section-title">技术栈</h2>
+            <div class="chip-row">
+              {project.data.stack.map((item) => (
+                <span class="chip">{item}</span>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {project.data.highlights.length > 0 && (
+          <section class="surface sidebar-card">
+            <p class="section-kicker">Highlights</p>
+            <h2 class="section-title">当前重点</h2>
+            <ul class="bullet-list">
+              {project.data.highlights.map((item) => (
+                <li>{item}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <section class="surface sidebar-card">
+          <p class="section-kicker">Links</p>
+          <h2 class="section-title">访问方式</h2>
+          {project.data.links.length > 0 ? (
+            <div class="link-row">
+              {project.data.links.map((item) => (
+                <a href={withBasePath(item.href)}>{item.label}</a>
+              ))}
+            </div>
+          ) : (
+            <p class="muted">当前还没有公开入口，后续会先通过站内日志继续记录进展。</p>
+          )}
+        </section>
+      </aside>
+    </section>
+  </article>
+</BaseLayout>
+
+<style>
+  .project-detail {
+    gap: 1.2rem;
+  }
+
+  .hero,
+  .prose-card,
+  .sidebar-card {
+    padding: clamp(1rem, 2.4vw, 1.4rem);
+    border-radius: var(--radius-lg);
+  }
+
+  .summary {
+    margin: 0;
+    max-width: 64ch;
+  }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .meta-pill {
+    border-radius: 999px;
+    border: 1px solid rgba(196, 82, 55, 0.28);
+    background: rgba(196, 82, 55, 0.08);
+    color: var(--accent-strong);
+    padding: 0.16rem 0.56rem;
+    font-size: 0.8rem;
+  }
+
+  .meta-pill-soft {
+    border-color: rgba(100, 116, 139, 0.26);
+    background: rgba(100, 116, 139, 0.08);
+    color: var(--text-soft);
+  }
+
+  .meta-pill-link {
+    border-color: rgba(31, 120, 117, 0.28);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+  }
+
+  .meta-pill-link:hover {
+    border-color: rgba(31, 120, 117, 0.48);
+    background: rgba(31, 120, 117, 0.14);
+    color: var(--accent-cyan);
+  }
+
+  .detail-layout {
+    display: grid;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .main-column,
+  .sidebar,
+  .related-section {
+    gap: 1rem;
+  }
+
+  .chip-row,
+  .link-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .chip,
+  .link-row a {
+    border-radius: 999px;
+    border: 1px solid rgba(31, 120, 117, 0.28);
+    background: rgba(31, 120, 117, 0.08);
+    color: var(--accent-cyan);
+    padding: 0.18rem 0.55rem;
+    font-size: 0.8rem;
+  }
+
+  .link-row a:hover {
+    border-color: rgba(31, 120, 117, 0.48);
+    background: rgba(31, 120, 117, 0.14);
+    color: var(--accent-cyan);
+  }
+
+  .bullet-list {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .bullet-list li {
+    line-height: 1.55;
+    color: var(--text);
+  }
+
+  .related-grid {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  @media (min-width: 920px) {
+    .detail-layout {
+      grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
+    }
+
+    .related-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  :global(html[data-theme="dark"]) .meta-pill {
+    border-color: rgba(241, 141, 85, 0.34);
+    background: rgba(241, 141, 85, 0.12);
+  }
+
+  :global(html[data-theme="dark"]) .meta-pill-soft {
+    border-color: rgba(100, 116, 139, 0.5);
+    background: rgba(100, 116, 139, 0.2);
+    color: #b7c4d8;
+  }
+
+  :global(html[data-theme="dark"]) .meta-pill-link,
+  :global(html[data-theme="dark"]) .chip,
+  :global(html[data-theme="dark"]) .link-row a {
+    border-color: rgba(86, 198, 194, 0.34);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
+  }
+</style>

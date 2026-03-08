@@ -1,0 +1,268 @@
+---
+import { withBasePath } from "@/utils/paths";
+
+type TagCloudItem = {
+  tag: string;
+  count: number;
+  href?: string;
+};
+
+type Props = {
+  items: TagCloudItem[];
+  ariaLabel?: string;
+  variant?: "default" | "home";
+};
+
+const { items, ariaLabel = "标签列表", variant = "default" } = Astro.props as Props;
+
+const counts = items.map((item) => item.count);
+const maxCount = counts.length > 0 ? Math.max(...counts) : 1;
+const minCount = counts.length > 0 ? Math.min(...counts) : 1;
+
+const cloudItems = items.map((item) => {
+  const normalized = maxCount === minCount ? 0.55 : (item.count - minCount) / (maxCount - minCount);
+
+  return {
+    ...item,
+    href: item.href ? withBasePath(item.href) : undefined,
+    style: [
+      `--tag-accent-opacity:${(0.1 + normalized * 0.12).toFixed(2)}`,
+      `--tag-border-opacity:${(0.22 + normalized * 0.16).toFixed(2)}`
+    ].join(";")
+  };
+});
+---
+
+<div class:list={["tag-cloud", `tag-cloud-${variant}`]} aria-label={ariaLabel}>
+  {cloudItems.map((item) =>
+    item.href ? (
+      <a class:list={["tag-cloud-item", `tag-cloud-item-${variant}`]} href={item.href} style={item.style}>
+        <span class="tag-cloud-main">
+          <span class="tag-cloud-hash">#</span>
+          <span class="tag-cloud-name">{item.tag}</span>
+        </span>
+        <span class="tag-cloud-meta">
+          <span class="tag-cloud-count">{item.count} 篇</span>
+          {variant === "home" && <span class="tag-cloud-hint">查看主题</span>}
+        </span>
+      </a>
+    ) : (
+      <span class:list={["tag-cloud-item", `tag-cloud-item-${variant}`]} style={item.style}>
+        <span class="tag-cloud-main">
+          <span class="tag-cloud-hash">#</span>
+          <span class="tag-cloud-name">{item.tag}</span>
+        </span>
+        <span class="tag-cloud-meta">
+          <span class="tag-cloud-count">{item.count} 篇</span>
+          {variant === "home" && <span class="tag-cloud-hint">查看主题</span>}
+        </span>
+      </span>
+    )
+  )}
+</div>
+
+<style>
+  .tag-cloud {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+    gap: 0.9rem;
+  }
+
+  .tag-cloud-item {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    align-items: stretch;
+    gap: 0.78rem;
+    min-height: 5.6rem;
+    min-width: 0;
+    padding: 0.92rem 1.1rem 1rem;
+    border-radius: 26px;
+    border: 1px solid rgba(31, 120, 117, var(--tag-border-opacity, 0.28));
+    background:
+      radial-gradient(circle at 100% 0%, rgba(31, 120, 117, calc(var(--tag-accent-opacity, 0.12) + 0.04)), transparent 28%),
+      radial-gradient(circle at 0% 0%, rgba(196, 82, 55, 0.08), transparent 20%),
+      linear-gradient(160deg, rgba(255, 255, 255, 0.9), rgba(244, 249, 249, 0.97));
+    box-shadow:
+      0 18px 40px rgba(8, 18, 33, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    transition:
+      transform 220ms var(--ease-out),
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out),
+      box-shadow 220ms var(--ease-out);
+  }
+
+  .tag-cloud-item::before {
+    content: "";
+    position: absolute;
+    top: 0.72rem;
+    left: 1rem;
+    right: 1rem;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(31, 120, 117, 0.34), rgba(196, 82, 55, 0.24), transparent);
+    opacity: 0.8;
+    pointer-events: none;
+  }
+
+  a.tag-cloud-item {
+    color: inherit;
+  }
+
+  a.tag-cloud-item:hover,
+  a.tag-cloud-item:focus-visible {
+    transform: translateY(-4px);
+    border-color: rgba(31, 120, 117, 0.42);
+    background:
+      radial-gradient(circle at 100% 0%, rgba(31, 120, 117, 0.18), transparent 28%),
+      radial-gradient(circle at 0% 0%, rgba(196, 82, 55, 0.1), transparent 20%),
+      linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(238, 246, 246, 0.99));
+    box-shadow: 0 24px 50px rgba(8, 18, 33, 0.14);
+  }
+
+  .tag-cloud-main {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.08rem;
+    min-width: 0;
+    color: var(--text);
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+    font-size: 1.04rem;
+    font-weight: 700;
+    line-height: 1.24;
+    letter-spacing: -0.03em;
+  }
+
+  .tag-cloud-hash {
+    color: var(--accent-cyan);
+  }
+
+  .tag-cloud-name {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-wrap: balance;
+  }
+
+  .tag-cloud-count {
+    flex: none;
+    border-radius: 999px;
+    padding: 0.28rem 0.62rem;
+    background: rgba(31, 120, 117, 0.1);
+    color: var(--accent-cyan);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .tag-cloud-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    min-width: 0;
+    margin-top: auto;
+  }
+
+  .tag-cloud-hint {
+    font-size: 0.72rem;
+    color: var(--text-soft);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+    white-space: nowrap;
+  }
+
+  .tag-cloud-home {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  }
+
+  .tag-cloud-item-home {
+    min-height: auto;
+    gap: 0.46rem;
+    padding: 0.78rem 0.95rem 0.84rem;
+  }
+
+  .tag-cloud-item-home::before {
+    top: 0.48rem;
+    right: auto;
+    width: 2.8rem;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(31, 120, 117, 0.52), rgba(196, 82, 55, 0.26));
+  }
+
+  .tag-cloud-item-home .tag-cloud-meta {
+    margin-top: 0;
+  }
+
+  .tag-cloud-item-home .tag-cloud-count {
+    padding: 0.24rem 0.54rem;
+  }
+
+  .tag-cloud-item-home .tag-cloud-hint {
+    font-size: 0.68rem;
+  }
+
+  @media (max-width: 560px) {
+    .tag-cloud {
+      grid-template-columns: 1fr;
+    }
+
+    .tag-cloud-item {
+      min-height: auto;
+    }
+  }
+
+  :global(html[data-theme="dark"]) .tag-cloud-item {
+    border-color: rgba(86, 198, 194, var(--tag-border-opacity, 0.34));
+    background:
+      radial-gradient(circle at 100% 0%, rgba(86, 198, 194, calc(var(--tag-accent-opacity, 0.14) + 0.05)), transparent 30%),
+      radial-gradient(circle at 0% 0%, rgba(241, 141, 85, 0.1), transparent 22%),
+      linear-gradient(160deg, rgba(16, 24, 34, 0.96), rgba(12, 20, 30, 0.99));
+    box-shadow:
+      0 18px 40px rgba(0, 0, 0, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  :global(html[data-theme="dark"]) a.tag-cloud-item:hover,
+  :global(html[data-theme="dark"]) a.tag-cloud-item:focus-visible {
+    border-color: rgba(86, 198, 194, 0.5);
+    background:
+      radial-gradient(circle at 100% 0%, rgba(86, 198, 194, 0.2), transparent 30%),
+      radial-gradient(circle at 0% 0%, rgba(241, 141, 85, 0.12), transparent 22%),
+      linear-gradient(160deg, rgba(18, 29, 40, 0.98), rgba(12, 22, 32, 1));
+    box-shadow: 0 22px 48px rgba(0, 0, 0, 0.34);
+  }
+
+  :global(html[data-theme="dark"]) .tag-cloud-main {
+    color: var(--text);
+  }
+
+  :global(html[data-theme="dark"]) .tag-cloud-hash,
+  :global(html[data-theme="dark"]) .tag-cloud-count {
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"]) .tag-cloud-hint {
+    color: #9cb1cc;
+  }
+
+  :global(html[data-theme="dark"]) .tag-cloud-count {
+    background: rgba(86, 198, 194, 0.12);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tag-cloud-item {
+      transition: none;
+    }
+
+    a.tag-cloud-item:hover,
+    a.tag-cloud-item:focus-visible {
+      transform: none;
+    }
+  }
+</style>

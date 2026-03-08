@@ -1,48 +1,195 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
+import { withBasePath } from "@/utils/paths";
+
+const lanes = [
+  {
+    title: "技术内容",
+    desc: "前端、Astro、工具链、写作工作流，以及那些值得反复沉淀的方法论。",
+    href: withBasePath("/archive/"),
+    action: "去看文章"
+  },
+  {
+    title: "游戏与项目",
+    desc: "从网页工具到游戏原型，再到仍在构思中的实验项目。",
+    href: withBasePath("/projects/"),
+    action: "去看项目"
+  },
+  {
+    title: "站点实验",
+    desc: "搜索、控制台、隐藏文章和彩蛋，都是这个站的一部分，而不只是附属功能。",
+    href: withBasePath("/console/"),
+    action: "进入控制台"
+  }
+];
+
+const beliefs = [
+  "先把信息讲清楚，再考虑做得多酷。",
+  "内容和项目应该互相喂养，而不是彼此抢版面。",
+  "个人站最有价值的不是功能数量，而是持续更新的痕迹。"
+];
+
+const startPoints = [
+  {
+    title: "如果你想先看写作",
+    desc: "从归档、搜索和标签开始，会最快理解这个站的内容结构。",
+    href: withBasePath("/search/")
+  },
+  {
+    title: "如果你想先看作品",
+    desc: "项目页会比文章更直接地展示我正在做什么。",
+    href: withBasePath("/projects/")
+  },
+  {
+    title: "如果你想先看站点个性",
+    desc: "控制台和隐藏文章更像这个站的实验区。",
+    href: withBasePath("/console/")
+  }
+];
 ---
 
 <BaseLayout title="关于">
-  <section class="surface about stack" data-reveal>
-    <p class="section-kicker">About</p>
-    <h1 class="page-title">关于我</h1>
-    <p class="muted">
-      随手做的纯前端静态博客。
-    </p>
+  <section class="stack about-page" data-reveal>
+    <header class="surface about-hero">
+      <p class="section-kicker">About</p>
+      <h1 class="page-title">关于我</h1>
+      <p class="muted intro">
+        我把这个站当成一个长期生长的个人空间：一边写技术和工具，一边记录游戏项目和站点实验。
+      </p>
+    </header>
 
-    <div class="stack feature-list">
-      <h2>所以这个站有什么？</h2>
+    <section class="lane-grid" data-reveal style="--reveal-delay: 70ms;">
+      {lanes.map((item) => (
+        <article class="surface lane-card">
+          <h2>{item.title}</h2>
+          <p class="muted">{item.desc}</p>
+          <a href={item.href}>{item.action}</a>
+        </article>
+      ))}
+    </section>
+
+    <section class="surface beliefs" data-reveal style="--reveal-delay: 110ms;">
+      <p class="section-kicker">Why This Site</p>
+      <h2 class="section-title">这个站想保持什么</h2>
       <ul>
-        <li>Astro 静态生成，Markdown 驱动内容。</li>
-        <li>固定暗黑模式 + 绿色主题设计系统。</li>
-        <li>Shiki 构建期代码高亮，移动端可滚动代码块。</li>
-        <li>内置标签、归档、RSS、Sitemap 和 GitHub Pages 发布流程。</li>
+        {beliefs.map((item) => (
+          <li>{item}</li>
+        ))}
       </ul>
-    </div>
+    </section>
+
+    <section class="stack" data-reveal style="--reveal-delay: 150ms;">
+      <div>
+        <p class="section-kicker">Start Here</p>
+        <h2 class="section-title">建议入口</h2>
+      </div>
+      <div class="start-grid">
+        {startPoints.map((item) => (
+          <article class="surface start-card">
+            <h3>{item.title}</h3>
+            <p class="muted">{item.desc}</p>
+            <a href={item.href}>打开</a>
+          </article>
+        ))}
+      </div>
+    </section>
   </section>
 </BaseLayout>
 
 <style>
-  .about {
-    padding: 1.3rem;
+  .about-page {
     gap: 1rem;
+  }
+
+  .about-hero,
+  .beliefs,
+  .lane-card,
+  .start-card {
+    padding: 1.2rem;
     border-radius: var(--radius-lg);
   }
 
-  h2 {
+  .about-hero {
+    display: grid;
+    gap: 0.72rem;
+  }
+
+  .intro {
     margin: 0;
-    font-size: 1.18rem;
+    max-width: 62ch;
+  }
+
+  .lane-grid,
+  .start-grid {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .lane-card,
+  .start-card {
+    display: grid;
+    gap: 0.58rem;
+  }
+
+  h2,
+  h3,
+  .lane-card p,
+  .start-card p {
+    margin: 0;
+  }
+
+  h2,
+  h3 {
     font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
   }
 
-  ul {
-    margin: 0;
-    padding-left: 1.15rem;
-    display: grid;
-    gap: 0.48rem;
+  .lane-card a,
+  .start-card a {
+    width: fit-content;
+    border-radius: 999px;
+    border: 1px solid rgba(31, 120, 117, 0.3);
+    padding: 0.28rem 0.7rem;
+    color: var(--accent-cyan);
+    font-size: 0.82rem;
+    font-weight: 600;
   }
 
-  .feature-list {
-    margin-top: 0.2rem;
+  .lane-card a:hover,
+  .start-card a:hover {
+    border-color: rgba(31, 120, 117, 0.48);
+    background: rgba(31, 120, 117, 0.1);
+    color: var(--accent-cyan);
+  }
+
+  .beliefs ul {
+    margin: 0.8rem 0 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .beliefs li {
+    line-height: 1.58;
+    color: var(--text);
+  }
+
+  @media (min-width: 860px) {
+    .lane-grid,
+    .start-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  :global(html[data-theme="dark"]) .beliefs,
+  :global(html[data-theme="dark"]) .lane-card,
+  :global(html[data-theme="dark"]) .start-card {
+    border-color: rgba(45, 59, 75, 0.95);
+  }
+
+  :global(html[data-theme="dark"]) .lane-card a,
+  :global(html[data-theme="dark"]) .start-card a {
+    border-color: rgba(86, 198, 194, 0.34);
+    background: rgba(86, 198, 194, 0.12);
+    color: var(--accent-cyan-soft);
   }
 </style>

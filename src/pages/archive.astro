@@ -1,13 +1,18 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { getAllPublishedPosts, getPostTags, normalizeUnlockCode, tagToUrlSegment } from "@/utils/posts";
+import { getPostCategoryLabel } from "@/config/taxonomy";
+import { getAllPublishedPosts, getPostTags, tagToUrlSegment } from "@/utils/posts";
+import { getAllProjects } from "@/utils/projects";
 import { withBasePath } from "@/utils/paths";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 const getDateKey = (date: Date) => date.toISOString().slice(0, 10);
 const tagBaseHref = withBasePath("/tags/");
+const projectBaseHref = withBasePath("/projects/");
 
 const posts = await getAllPublishedPosts({ includeHidden: true });
+const projects = await getAllProjects();
+const projectTitleMap = new Map(projects.map((project) => [project.slug, project.data.title]));
 
 const archiveItems = posts.map((post) => {
   const published = post.data.pubDate;
@@ -22,9 +27,13 @@ const archiveItems = posts.map((post) => {
     href: withBasePath(`/posts/${post.slug}/`),
     title: post.data.title,
     description: post.data.description,
+    hidden: post.data.hidden === true,
     tags,
-    hidden: post.data.hidden,
-    unlockCode: normalizeUnlockCode(post.data.unlockCode),
+    category: post.data.category,
+    categoryLabel: getPostCategoryLabel(post.data.category),
+    series: post.data.series ?? null,
+    project: post.data.project ?? null,
+    projectLabel: post.data.project ? (projectTitleMap.get(post.data.project) ?? post.data.project) : null,
     year,
     month,
     day,
@@ -39,14 +48,56 @@ const archiveItems = posts.map((post) => {
   };
 });
 
-const visibleArchiveItems = archiveItems.filter((item) => !item.hidden);
+const visibleArchiveItems = archiveItems;
+const isArchiveDense = visibleArchiveItems.length > 12;
+const formatTagCount = (count: number) => String(count).padStart(2, "0");
+const getTagTone = (normalized: number) => {
+  if (normalized >= 0.68) {
+    return "warm";
+  }
+  if (normalized >= 0.3) {
+    return "cool";
+  }
+  return "neutral";
+};
+const buildTagCloudItems = (items: typeof archiveItems) => {
+  const tags = [...new Set(items.flatMap((item) => item.tags))].sort((a, b) =>
+    a.localeCompare(b, "zh-Hans-CN")
+  );
+  const tagCounts = new Map(tags.map((tag) => [tag, 0]));
+
+  for (const item of items) {
+    for (const tag of item.tags) {
+      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+    }
+  }
+
+  const countValues = [...tagCounts.values()];
+  const maxCount = countValues.length > 0 ? Math.max(...countValues) : 1;
+  const minCount = countValues.length > 0 ? Math.min(...countValues) : 1;
+
+  return tags.map((tag) => {
+    const count = tagCounts.get(tag) ?? 0;
+    const normalized = maxCount === minCount ? 0.55 : (count - minCount) / (maxCount - minCount);
+
+    return {
+      tag,
+      count,
+      countLabel: formatTagCount(count),
+      tone: getTagTone(normalized)
+    };
+  });
+};
 
 const archiveYears = [...new Set(visibleArchiveItems.map((item) => item.year))].sort(
   (a, b) => Number(b) - Number(a)
 );
-const allTags = [...new Set(visibleArchiveItems.flatMap((item) => item.tags))].sort((a, b) =>
-  a.localeCompare(b, "zh-Hans-CN")
-);
+const initialTagCloud = buildTagCloudItems(visibleArchiveItems);
+const allTags = initialTagCloud.map((item) => item.tag);
+const allCategories = [...new Set(visibleArchiveItems.map((item) => item.category))].map((category) => ({
+  value: category,
+  label: getPostCategoryLabel(category)
+}));
 const totalTags = allTags.length;
 
 const minDate = visibleArchiveItems.length
@@ -78,110 +129,163 @@ const fallbackGroups = archiveYears.map((year) => ({
         <p class="section-kicker">Archive Lab</p>
         <h1 class="page-title">归档</h1>
       </div>
-      <p class="muted">
-        支持按年、月、日、日期区间、标签与关键词的组合筛选。当前共有 {visibleArchiveItems.length} 篇文章，{totalTags} 个标签。
-      </p>
+        <p class="muted" data-archive-overview>
+          当前共有 {visibleArchiveItems.length} 篇文章，支持按年份、分类、标签与关键词快速定位；更细的条件收在高级筛选里。
+        </p>
     </div>
 
     {visibleArchiveItems.length > 0 ? (
       <>
         <section class="surface filter-panel" data-archive-filter>
-          <div class="filter-grid">
-            <label class="field">
-              <span>分组方式</span>
-              <select data-archive-granularity>
-                <option value="year">按年</option>
-                <option value="month">按月</option>
-                <option value="day">按天</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>年份</span>
-              <select data-archive-year>
-                <option value="all">全部年份</option>
-                {archiveYears.map((year) => (
-                  <option value={year}>{year} 年</option>
-                ))}
-              </select>
-            </label>
-
-            <label class="field">
-              <span>月份</span>
-              <select data-archive-month>
-                <option value="all">全部月份</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>日期</span>
-              <select data-archive-day>
-                <option value="all">全部日期</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>排序</span>
-              <select data-archive-sort>
-                <option value="desc">最新优先</option>
-                <option value="asc">最早优先</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>标签模式</span>
-              <select data-archive-tag-mode>
-                <option value="or">匹配任一标签 (OR)</option>
-                <option value="and">必须包含全部标签 (AND)</option>
-              </select>
-            </label>
-
-            <label class="field field-wide">
-              <span>关键词</span>
-              <input
-                type="search"
-                placeholder="搜索标题、摘要或标签"
-                inputmode="search"
-                autocomplete="off"
-                data-archive-query
-              />
-            </label>
+          <div class="filter-panel-head">
+            <div>
+              <p class="section-kicker">Archive Console</p>
+              <h2 class="filter-panel-title">筛选工作台</h2>
+            </div>
+            <p class="muted filter-panel-copy">
+              把时间、分类、标签和关键词组合起来，像整理档案一样快速定位内容。
+            </p>
           </div>
 
-          <div class="range-grid">
-            <label class="field">
-              <span>起始日期</span>
-              <input type="date" min={minDate} max={maxDate} data-archive-start-date />
-            </label>
+          <div class="filter-layout">
+            <section class="filter-block filter-block-primary">
+              <div class="filter-block-head">
+                <div>
+                  <p class="filter-block-kicker">常用筛选</p>
+                  <p class="filter-block-note">先用年份、分类、标签和关键词缩小范围，再决定是否打开高级筛选。</p>
+                </div>
+              </div>
 
-            <label class="field">
-              <span>结束日期</span>
-              <input type="date" min={minDate} max={maxDate} data-archive-end-date />
-            </label>
-          </div>
+              <div class="filter-grid filter-grid-basic">
+                <label class="field">
+                  <span>年份</span>
+                  <select data-archive-year>
+                    <option value="all">全部年份</option>
+                    {archiveYears.map((year) => (
+                      <option value={year}>{year} 年</option>
+                    ))}
+                  </select>
+                </label>
 
-          <div class="tag-advanced">
-            <div class="tag-advanced-head">
-              <p class="tag-title">多标签筛选</p>
-              <button class="tag-clear-btn" type="button" data-archive-clear-tags>清空标签</button>
-            </div>
-            <div class="tag-chip-list" data-archive-tag-chips>
-              {allTags.map((tag) => (
-                <button type="button" class="tag-chip" data-archive-tag-button={tag} aria-pressed="false">
-                  #{tag}
-                </button>
-              ))}
-            </div>
+                <label class="field">
+                  <span>分类</span>
+                  <select data-archive-category>
+                    <option value="all">全部分类</option>
+                    {allCategories.map((item) => (
+                      <option value={item.value}>{item.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label class="field field-wide">
+                  <span>关键词</span>
+                  <input
+                    type="search"
+                    placeholder="搜索标题、摘要或标签"
+                    inputmode="search"
+                    autocomplete="off"
+                    data-archive-query
+                  />
+                </label>
+              </div>
+
+              <div class="tag-advanced filter-block tag-block-inline">
+                <div class="tag-advanced-head filter-block-head">
+                  <div>
+                    <p class="filter-block-kicker">标签组合</p>
+                    <p class="filter-block-note">默认使用“匹配任一标签”；需要 AND / OR 切换时到高级筛选里调整。</p>
+                  </div>
+                  <button class="tag-clear-btn" type="button" data-archive-clear-tags>清空标签</button>
+                </div>
+                <div class="tag-chip-list" data-archive-tag-chips>
+                  {initialTagCloud.map((item) => (
+                    <button
+                      type="button"
+                      class={`tag-chip tag-chip-${item.tone}`}
+                      data-archive-tag-button={item.tag}
+                      aria-pressed="false"
+                      aria-label={`标签 ${item.tag}，${item.count} 篇文章`}
+                    >
+                      <span class="tag-chip-name">{item.tag}</span>
+                      <span class="tag-chip-count">{item.countLabel}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <details class="filter-advanced" open={isArchiveDense}>
+              <summary>高级筛选</summary>
+              <div class="filter-advanced-grid">
+                <label class="field">
+                  <span>分组方式</span>
+                  <select data-archive-granularity>
+                    <option value="year">按年</option>
+                    <option value="month">按月</option>
+                    <option value="day">按天</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>月份</span>
+                  <select data-archive-month>
+                    <option value="all">全部月份</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>日期</span>
+                  <select data-archive-day>
+                    <option value="all">全部日期</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>排序</span>
+                  <select data-archive-sort>
+                    <option value="desc">最新优先</option>
+                    <option value="asc">最早优先</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>标签模式</span>
+                  <select data-archive-tag-mode>
+                    <option value="or">匹配任一标签 (OR)</option>
+                    <option value="and">必须包含全部标签 (AND)</option>
+                  </select>
+                </label>
+
+                <label class="field field-wide">
+                  <span>起始日期</span>
+                  <input type="date" min={minDate} max={maxDate} data-archive-start-date />
+                </label>
+
+                <label class="field field-wide">
+                  <span>结束日期</span>
+                  <input type="date" min={minDate} max={maxDate} data-archive-end-date />
+                </label>
+
+                <label class="check-field check-field-advanced">
+                  <input type="checkbox" data-archive-updated />
+                  <span>仅看有更新记录</span>
+                </label>
+              </div>
+            </details>
           </div>
 
           <div class="filter-actions">
-            <label class="check-field">
-              <input type="checkbox" data-archive-updated />
-              <span>仅看有更新记录</span>
-            </label>
-            <p class="muted result-summary" data-archive-summary>
-              显示 {visibleArchiveItems.length} / {visibleArchiveItems.length} 篇，按年分组。
-            </p>
+            <div class="filter-status">
+              <p class="muted filter-hint">默认只露出常用筛选；需要更细的时间和分组条件时再展开高级选项。</p>
+            </div>
+
+            <div class="filter-summary-card">
+              <p class="filter-summary-label">结果概览</p>
+              <p class="muted result-summary" data-archive-summary>
+                显示 {visibleArchiveItems.length} / {visibleArchiveItems.length} 篇，按年分组。
+              </p>
+            </div>
+
             <button class="reset-btn" type="button" data-archive-reset>
               重置全部筛选
             </button>
@@ -193,7 +297,8 @@ const fallbackGroups = archiveYears.map((year) => ({
             <section class="surface archive-group">
               <h2 class="archive-heading">
                 <span class="archive-dot"></span>
-                {group.label}
+                <span class="archive-heading-text">{group.label}</span>
+                <span class="archive-heading-count">{group.items.length} 篇</span>
               </h2>
               <ul class="archive-list">
                 {group.items.map((item) => (
@@ -201,6 +306,16 @@ const fallbackGroups = archiveYears.map((year) => ({
                     <div class="archive-item-main">
                       <a href={item.href}>{item.title}</a>
                       {item.description && <p class="archive-desc muted">{item.description}</p>}
+                      <div class="archive-tags archive-info-row">
+                        {item.hidden && <span class="archive-info-chip archive-info-chip-hidden">彩蛋内容</span>}
+                        <span class="archive-info-chip">{item.categoryLabel}</span>
+                        {item.series && <span class="archive-info-chip">系列 · {item.series}</span>}
+                        {item.project && item.projectLabel && (
+                          <a class="archive-info-chip" href={withBasePath(`/projects/${item.project}/`)}>
+                            项目 · {item.projectLabel}
+                          </a>
+                        )}
+                      </div>
                       {item.tags.length > 0 && (
                         <div class="archive-tags">
                           {item.tags.map((tag) => (
@@ -225,14 +340,21 @@ const fallbackGroups = archiveYears.map((year) => ({
         <script
           type="application/json"
           id="archive-data"
-          set:html={JSON.stringify({ items: archiveItems, allTags })}
+          set:html={JSON.stringify({ items: visibleArchiveItems, allTags, allCategories })}
         ></script>
-        <script is:inline define:vars={{ tagBaseHref }}>
+        <script is:inline define:vars={{ tagBaseHref, projectBaseHref }}>
           (() => {
             const dataNode = document.getElementById("archive-data");
             const output = document.querySelector("[data-archive-output]");
+            const overview = document.querySelector("[data-archive-overview]");
+            const tagChipList = document.querySelector("[data-archive-tag-chips]");
 
-            if (!(dataNode instanceof HTMLScriptElement) || !(output instanceof HTMLElement)) {
+            if (
+              !(dataNode instanceof HTMLScriptElement) ||
+              !(output instanceof HTMLElement) ||
+              !(overview instanceof HTMLElement) ||
+              !(tagChipList instanceof HTMLElement)
+            ) {
               return;
             }
 
@@ -244,45 +366,18 @@ const fallbackGroups = archiveYears.map((year) => ({
             }
 
             const allItems = Array.isArray(payload?.items) ? payload.items : [];
-            const allTags = Array.isArray(payload?.allTags) ? payload.allTags : [];
             if (!Array.isArray(allItems) || allItems.length === 0) {
               return;
             }
 
-            const STORAGE_KEY = "uent26-unlock-codes";
-            const normalizeCode = (value) => String(value ?? "").trim().toLowerCase();
-            const getStoredCodes = () => {
-              try {
-                const raw = localStorage.getItem(STORAGE_KEY);
-                if (!raw) {
-                  return new Set();
-                }
-                const parsed = JSON.parse(raw);
-                if (!Array.isArray(parsed)) {
-                  return new Set();
-                }
-                return new Set(parsed.map((item) => normalizeCode(item)).filter(Boolean));
-              } catch {
-                return new Set();
-              }
-            };
-            const isUnlocked = (item, codes) => {
-              if (!item?.hidden) {
-                return true;
-              }
-              const code = normalizeCode(item.unlockCode);
-              return Boolean(code && codes.has(code));
-            };
-            const getVisibleItems = () => {
-              const codes = getStoredCodes();
-              return allItems.filter((item) => isUnlocked(item, codes));
-            };
+            const getVisibleItems = () => allItems;
 
             const granularitySelect = document.querySelector("[data-archive-granularity]");
             const yearSelect = document.querySelector("[data-archive-year]");
             const monthSelect = document.querySelector("[data-archive-month]");
             const daySelect = document.querySelector("[data-archive-day]");
             const sortSelect = document.querySelector("[data-archive-sort]");
+            const categorySelect = document.querySelector("[data-archive-category]");
             const tagModeSelect = document.querySelector("[data-archive-tag-mode]");
             const queryInput = document.querySelector("[data-archive-query]");
             const startDateInput = document.querySelector("[data-archive-start-date]");
@@ -291,7 +386,6 @@ const fallbackGroups = archiveYears.map((year) => ({
             const clearTagsButton = document.querySelector("[data-archive-clear-tags]");
             const resetButton = document.querySelector("[data-archive-reset]");
             const summary = document.querySelector("[data-archive-summary]");
-            const tagButtons = [...document.querySelectorAll("[data-archive-tag-button]")];
 
             if (
               !(granularitySelect instanceof HTMLSelectElement) ||
@@ -299,6 +393,7 @@ const fallbackGroups = archiveYears.map((year) => ({
               !(monthSelect instanceof HTMLSelectElement) ||
               !(daySelect instanceof HTMLSelectElement) ||
               !(sortSelect instanceof HTMLSelectElement) ||
+              !(categorySelect instanceof HTMLSelectElement) ||
               !(tagModeSelect instanceof HTMLSelectElement) ||
               !(queryInput instanceof HTMLInputElement) ||
               !(startDateInput instanceof HTMLInputElement) ||
@@ -317,6 +412,7 @@ const fallbackGroups = archiveYears.map((year) => ({
               month: "all",
               day: "all",
               sort: "desc",
+              category: "all",
               query: "",
               updatedOnly: false,
               startDate: "",
@@ -329,6 +425,53 @@ const fallbackGroups = archiveYears.map((year) => ({
               selectedTags: new Set()
             };
 
+            const getCategoryOptions = (items) =>
+              [...new Map(
+                items
+                  .filter((item) => item?.category && item?.categoryLabel)
+                  .map((item) => [item.category, { value: item.category, label: item.categoryLabel }])
+              ).values()].sort((left, right) => left.label.localeCompare(right.label, "zh-Hans-CN"));
+
+            const getTagOptions = (items) =>
+              [...new Set(items.flatMap((item) => (Array.isArray(item.tags) ? item.tags : [])))].sort((left, right) =>
+                left.localeCompare(right, "zh-Hans-CN")
+              );
+
+            const tagCloudOffsets = ["0rem", "-0.04rem", "0.03rem", "-0.02rem"];
+            const getTagTone = (normalized) => {
+              if (normalized >= 0.68) {
+                return "warm";
+              }
+              if (normalized >= 0.3) {
+                return "cool";
+              }
+              return "neutral";
+            };
+
+            const getDateBounds = (items) => {
+              if (items.length === 0) {
+                return { min: "", max: "" };
+              }
+
+              const sortedKeys = items.map((item) => item.dateKey).sort();
+              return { min: sortedKeys[0], max: sortedKeys[sortedKeys.length - 1] };
+            };
+
+            const allCategoryOptions = getCategoryOptions(allItems);
+
+            const applyQueryPreset = () => {
+              const params = new URLSearchParams(window.location.search);
+              const category = normalizeKeyword(params.get("category") || "");
+              if (category && allCategoryOptions.some((item) => item?.value === category)) {
+                state.category = category;
+              }
+
+              const query = params.get("q");
+              if (query) {
+                state.query = query;
+              }
+            };
+
             const granularityLabelMap = {
               year: "年",
               month: "月",
@@ -338,6 +481,7 @@ const fallbackGroups = archiveYears.map((year) => ({
             const compareDesc = (left, right) => (left === right ? 0 : left > right ? -1 : 1);
             const unique = (values) => [...new Set(values)];
             const normalizeKeyword = (value) => value.trim().toLowerCase();
+            const formatTagCount = (count) => String(count).padStart(2, "0");
 
             const setSelectOptions = (select, stateKey, options, allLabel) => {
               while (select.firstChild) {
@@ -363,6 +507,37 @@ const fallbackGroups = archiveYears.map((year) => ({
             const formatDayLabel = (value) => {
               const [year, month, day] = value.split("-");
               return `${year} 年 ${month} 月 ${day} 日`;
+            };
+
+            const syncCategorySelect = (items) => {
+              setSelectOptions(categorySelect, "category", getCategoryOptions(items), "全部分类");
+            };
+
+            const syncDateBounds = (items) => {
+              const { min, max } = getDateBounds(items);
+
+              if (min && max) {
+                startDateInput.min = min;
+                startDateInput.max = max;
+                endDateInput.min = min;
+                endDateInput.max = max;
+              } else {
+                startDateInput.removeAttribute("min");
+                startDateInput.removeAttribute("max");
+                endDateInput.removeAttribute("min");
+                endDateInput.removeAttribute("max");
+              }
+
+              if (state.startDate && (min === "" || state.startDate < min || state.startDate > max)) {
+                state.startDate = "";
+              }
+
+              if (state.endDate && (min === "" || state.endDate < min || state.endDate > max)) {
+                state.endDate = "";
+              }
+
+              startDateInput.value = state.startDate;
+              endDateInput.value = state.endDate;
             };
 
             const syncDateSelectCollections = (items) => {
@@ -395,19 +570,54 @@ const fallbackGroups = archiveYears.map((year) => ({
               );
             };
 
-            const syncTagButtons = () => {
-              for (const button of tagButtons) {
-                if (!(button instanceof HTMLButtonElement)) {
-                  continue;
+            const syncTagButtons = (items) => {
+              const tags = getTagOptions(items);
+              const availableTagSet = new Set(tags);
+              const tagCounts = new Map(tags.map((tag) => [tag, 0]));
+
+              for (const item of items) {
+                for (const tag of item.tags ?? []) {
+                  if (tagCounts.has(tag)) {
+                    tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+                  }
                 }
-                const tag = button.dataset.archiveTagButton;
-                if (!tag) {
-                  continue;
+              }
+
+              const countValues = [...tagCounts.values()];
+              const maxCount = countValues.length > 0 ? Math.max(...countValues) : 1;
+              const minCount = countValues.length > 0 ? Math.min(...countValues) : 1;
+
+              for (const tag of [...state.selectedTags]) {
+                if (!availableTagSet.has(tag)) {
+                  state.selectedTags.delete(tag);
                 }
+              }
+
+              tagChipList.replaceChildren();
+
+              tags.forEach((tag) => {
+                const count = tagCounts.get(tag) ?? 0;
+                const normalized = maxCount === minCount ? 0.55 : (count - minCount) / (maxCount - minCount);
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = `tag-chip tag-chip-${getTagTone(normalized)}`;
+                button.dataset.archiveTagButton = tag;
+                button.setAttribute("aria-label", `标签 ${tag}，${count} 篇文章`);
                 const isActive = state.selectedTags.has(tag);
                 button.setAttribute("aria-pressed", String(isActive));
                 button.classList.toggle("is-active", isActive);
-              }
+
+                const name = document.createElement("span");
+                name.className = "tag-chip-name";
+                name.textContent = tag;
+
+                const countNode = document.createElement("span");
+                countNode.className = "tag-chip-count";
+                countNode.textContent = formatTagCount(count);
+
+                button.append(name, countNode);
+                tagChipList.append(button);
+              });
             };
 
             const matchDateFilter = (item) => {
@@ -428,6 +638,9 @@ const fallbackGroups = archiveYears.map((year) => ({
               }
               return true;
             };
+
+            const matchCategoryFilter = (item) =>
+              state.category === "all" ? true : item.category === state.category;
 
             const matchTagFilter = (item) => {
               if (state.selectedTags.size === 0) {
@@ -459,12 +672,22 @@ const fallbackGroups = archiveYears.map((year) => ({
               if ((item.description || "").toLowerCase().includes(keyword)) {
                 return true;
               }
+              if ((item.categoryLabel || "").toLowerCase().includes(keyword)) {
+                return true;
+              }
+              if ((item.series || "").toLowerCase().includes(keyword)) {
+                return true;
+              }
+              if ((item.projectLabel || "").toLowerCase().includes(keyword)) {
+                return true;
+              }
               return item.tags.some((tag) => tag.includes(keyword));
             };
 
             const getFilteredItems = (items) =>
               items
                 .filter(matchDateFilter)
+                .filter(matchCategoryFilter)
                 .filter((item) => (state.updatedOnly ? Boolean(item.updatedDateISO) : true))
                 .filter(matchTagFilter)
                 .filter((item) => matchKeyword(item, normalizeKeyword(state.query)))
@@ -514,7 +737,13 @@ const fallbackGroups = archiveYears.map((year) => ({
               heading.className = "archive-heading";
               const dot = document.createElement("span");
               dot.className = "archive-dot";
-              heading.append(dot, group.label);
+              const headingText = document.createElement("span");
+              headingText.className = "archive-heading-text";
+              headingText.textContent = group.label;
+              const headingCount = document.createElement("span");
+              headingCount.className = "archive-heading-count";
+              headingCount.textContent = `${group.items.length} 篇`;
+              heading.append(dot, headingText, headingCount);
 
               const list = document.createElement("ul");
               list.className = "archive-list";
@@ -537,13 +766,45 @@ const fallbackGroups = archiveYears.map((year) => ({
                   main.append(description);
                 }
 
+                const infoWrap = document.createElement("div");
+                infoWrap.className = "archive-tags archive-info-row";
+
+                if (item.hidden) {
+                  const hiddenNode = document.createElement("span");
+                  hiddenNode.className = "archive-info-chip archive-info-chip-hidden";
+                  hiddenNode.textContent = "彩蛋内容";
+                  infoWrap.append(hiddenNode);
+                }
+
+                const categoryNode = document.createElement("span");
+                categoryNode.className = "archive-info-chip";
+                categoryNode.textContent = item.categoryLabel;
+                infoWrap.append(categoryNode);
+
+                if (item.series) {
+                  const seriesNode = document.createElement("span");
+                  seriesNode.className = "archive-info-chip";
+                  seriesNode.textContent = `系列 · ${item.series}`;
+                  infoWrap.append(seriesNode);
+                }
+
+                if (item.project && item.projectLabel) {
+                  const projectNode = document.createElement("a");
+                  projectNode.className = "archive-info-chip";
+                  projectNode.href = `${projectBaseHref}${encodeURIComponent(item.project)}/`;
+                  projectNode.textContent = `项目 · ${item.projectLabel}`;
+                  infoWrap.append(projectNode);
+                }
+
+                main.append(infoWrap);
+
                 if (item.tags.length > 0) {
                   const tagWrap = document.createElement("div");
                   tagWrap.className = "archive-tags";
                   for (const tag of item.tags) {
                     const tagNode = document.createElement("a");
                     tagNode.className = "archive-tag";
-                    tagNode.href = `${tagBaseHref}${encodeURIComponent(tag)}/`;
+                    tagNode.href = `${tagBaseHref}${encodeURIComponent(String(tag).trim().toLowerCase())}/`;
                     tagNode.textContent = `#${tag}`;
                     tagWrap.append(tagNode);
                   }
@@ -574,6 +835,10 @@ const fallbackGroups = archiveYears.map((year) => ({
 
             const updateSummary = (filteredCount, groupCount, totalCount) => {
               const tagArray = [...state.selectedTags];
+              const categoryInfo =
+                state.category !== "all"
+                  ? `；分类: ${categorySelect.options[categorySelect.selectedIndex]?.text || state.category}`
+                  : "";
               const tagInfo =
                 tagArray.length > 0
                   ? `；标签(${state.tagMode.toUpperCase()}): ${tagArray.map((tag) => `#${tag}`).join(", ")}`
@@ -584,13 +849,42 @@ const fallbackGroups = archiveYears.map((year) => ({
                   : "";
               summary.textContent = `显示 ${filteredCount} / ${totalCount} 篇，按${
                 granularityLabelMap[state.granularity]
-              }分组共 ${groupCount} 组${tagInfo}${rangeInfo}。`;
+              }分组共 ${groupCount} 组${categoryInfo}${tagInfo}${rangeInfo}。`;
+            };
+
+            const updateOverview = (items) => {
+              const categoryCount = getCategoryOptions(items).length;
+              const tagCount = getTagOptions(items).length;
+              overview.textContent = `支持按年、月、日、日期区间、分类、标签与关键词的组合筛选。当前共有 ${items.length} 篇文章，${categoryCount} 个分类，${tagCount} 个标签。`;
+            };
+
+            const syncQueryPreset = () => {
+              const params = new URLSearchParams(window.location.search);
+              if (state.category !== "all") {
+                params.set("category", state.category);
+              } else {
+                params.delete("category");
+              }
+
+              const normalizedQuery = state.query.trim();
+              if (normalizedQuery) {
+                params.set("q", normalizedQuery);
+              } else {
+                params.delete("q");
+              }
+
+              const nextSearch = params.toString();
+              const nextUrl = nextSearch ? `${window.location.pathname}?${nextSearch}` : window.location.pathname;
+              window.history.replaceState({}, "", nextUrl);
             };
 
             const render = () => {
               const visibleItems = getVisibleItems();
+              syncCategorySelect(visibleItems);
               syncDateSelectCollections(visibleItems);
-              syncTagButtons();
+              syncDateBounds(visibleItems);
+              syncTagButtons(visibleItems);
+              updateOverview(visibleItems);
 
               const filtered = getFilteredItems(visibleItems);
               const groups = groupItems(filtered);
@@ -608,6 +902,7 @@ const fallbackGroups = archiveYears.map((year) => ({
               }
 
               updateSummary(filtered.length, groups.length, visibleItems.length);
+              syncQueryPreset();
             };
 
             const normalizeDateRange = () => {
@@ -646,6 +941,11 @@ const fallbackGroups = archiveYears.map((year) => ({
                 render();
               });
 
+              categorySelect.addEventListener("change", () => {
+                state.category = categorySelect.value;
+                render();
+              });
+
               tagModeSelect.addEventListener("change", () => {
                 state.tagMode = tagModeSelect.value;
                 render();
@@ -676,23 +976,29 @@ const fallbackGroups = archiveYears.map((year) => ({
                 render();
               });
 
-              for (const button of tagButtons) {
-                if (!(button instanceof HTMLButtonElement)) {
-                  continue;
+              tagChipList.addEventListener("click", (event) => {
+                const target = event.target;
+                if (!(target instanceof Element)) {
+                  return;
                 }
+
+                const button = target.closest("[data-archive-tag-button]");
+                if (!(button instanceof HTMLButtonElement)) {
+                  return;
+                }
+
                 const tag = button.dataset.archiveTagButton;
                 if (!tag) {
-                  continue;
+                  return;
                 }
-                button.addEventListener("click", () => {
-                  if (state.selectedTags.has(tag)) {
-                    state.selectedTags.delete(tag);
-                  } else {
-                    state.selectedTags.add(tag);
-                  }
-                  render();
-                });
-              }
+
+                if (state.selectedTags.has(tag)) {
+                  state.selectedTags.delete(tag);
+                } else {
+                  state.selectedTags.add(tag);
+                }
+                render();
+              });
 
               clearTagsButton.addEventListener("click", () => {
                 state.selectedTags.clear();
@@ -705,6 +1011,7 @@ const fallbackGroups = archiveYears.map((year) => ({
                 state.month = defaultState.month;
                 state.day = defaultState.day;
                 state.sort = defaultState.sort;
+                state.category = defaultState.category;
                 state.query = defaultState.query;
                 state.updatedOnly = defaultState.updatedOnly;
                 state.startDate = defaultState.startDate;
@@ -714,6 +1021,7 @@ const fallbackGroups = archiveYears.map((year) => ({
 
                 granularitySelect.value = state.granularity;
                 sortSelect.value = state.sort;
+                categorySelect.value = state.category;
                 tagModeSelect.value = state.tagMode;
                 queryInput.value = state.query;
                 updatedCheckbox.checked = state.updatedOnly;
@@ -723,8 +1031,11 @@ const fallbackGroups = archiveYears.map((year) => ({
               });
             };
 
+            applyQueryPreset();
+
             granularitySelect.value = state.granularity;
             sortSelect.value = state.sort;
+            categorySelect.value = state.category;
             tagModeSelect.value = state.tagMode;
             queryInput.value = state.query;
             updatedCheckbox.checked = state.updatedOnly;
@@ -732,12 +1043,6 @@ const fallbackGroups = archiveYears.map((year) => ({
             endDateInput.value = state.endDate;
 
             bindControls();
-            window.addEventListener("unlock:changed", render);
-            window.addEventListener("storage", (event) => {
-              if (event.key === STORAGE_KEY) {
-                render();
-              }
-            });
             render();
           })();
         </script>
@@ -759,34 +1064,157 @@ const fallbackGroups = archiveYears.map((year) => ({
   }
 
   .filter-panel {
-    padding: 1rem;
-    border-radius: var(--radius-lg);
+    position: relative;
+    overflow: hidden;
+    padding: clamp(1.15rem, 2.8vw, 1.6rem);
+    border-radius: calc(var(--radius-lg) + 6px);
     border-color: rgba(218, 205, 184, 0.9);
+    display: grid;
+    gap: 1.15rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.18)),
+      linear-gradient(160deg, rgba(255, 252, 246, 0.76), rgba(249, 243, 232, 0.4));
+    box-shadow: 0 22px 52px rgba(28, 22, 12, 0.09);
+  }
+
+  .filter-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 160px;
+    background:
+      radial-gradient(circle at 12% -10%, rgba(241, 141, 85, 0.12), transparent 42%),
+      radial-gradient(circle at 88% 0%, rgba(86, 198, 194, 0.12), transparent 36%);
+    pointer-events: none;
+  }
+
+  .filter-panel-head,
+  .filter-layout,
+  .filter-actions {
+    position: relative;
+    z-index: 1;
+  }
+
+  .filter-panel-head {
+    display: grid;
+    gap: 0.5rem;
+    padding-bottom: 0.15rem;
+    border-bottom: 1px solid rgba(218, 205, 184, 0.72);
+  }
+
+  .filter-panel-title {
+    margin: 0;
+    font-size: clamp(1.32rem, 2vw, 1.64rem);
+    line-height: 1.14;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  }
+
+  .filter-panel-copy {
+    margin: 0;
+    max-width: 62ch;
+    line-height: 1.68;
+  }
+
+  .filter-layout {
     display: grid;
     gap: 1rem;
   }
 
+  .filter-block {
+    position: relative;
+    display: grid;
+    gap: 0.9rem;
+    padding: 1rem;
+    border-radius: 20px;
+    border: 1px solid rgba(218, 205, 184, 0.82);
+    background: rgba(255, 255, 255, 0.34);
+    backdrop-filter: blur(8px) saturate(110%);
+  }
+
+  .filter-block-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+
+  .filter-block-head > div {
+    display: grid;
+    gap: 0.32rem;
+  }
+
+  .filter-block-kicker {
+    margin: 0;
+    color: var(--accent-cyan);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .filter-block-note {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+
   .filter-grid {
     display: grid;
-    gap: 0.72rem;
+    gap: 0.82rem;
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .filter-grid-basic {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-advanced {
+    display: grid;
+    gap: 0.85rem;
+    padding: 1rem;
+    border-radius: 20px;
+    border: 1px solid rgba(218, 205, 184, 0.82);
+    background: rgba(255, 255, 255, 0.34);
+    backdrop-filter: blur(8px) saturate(110%);
+  }
+
+  .filter-advanced summary {
+    cursor: pointer;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.76rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent-cyan);
+    list-style: none;
+  }
+
+  .filter-advanced summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .filter-advanced-grid {
+    display: grid;
+    gap: 0.82rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .range-grid {
     display: grid;
-    gap: 0.72rem;
+    gap: 0.82rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .field {
     display: grid;
-    gap: 0.34rem;
+    gap: 0.42rem;
   }
 
   .field span {
     color: var(--text-soft);
-    font-size: 0.74rem;
-    letter-spacing: 0.07em;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     font-family: "IBM Plex Mono", monospace;
   }
@@ -795,16 +1223,32 @@ const fallbackGroups = archiveYears.map((year) => ({
     grid-column: span 2;
   }
 
+  .filter-grid-basic .field-wide {
+    grid-column: 1 / -1;
+  }
+
   .field select,
   .field input {
     width: 100%;
-    min-height: 2.32rem;
-    border-radius: 11px;
+    min-height: 2.56rem;
+    border-radius: 14px;
     border: 1px solid rgba(218, 205, 184, 0.95);
-    background: rgba(255, 255, 255, 0.74);
+    background: rgba(255, 255, 255, 0.8);
     color: var(--text);
     font: inherit;
-    padding: 0.36rem 0.62rem;
+    padding: 0.46rem 0.74rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    transition:
+      border-color 220ms var(--ease-out),
+      background 220ms var(--ease-out),
+      transform 220ms var(--ease-out),
+      box-shadow 220ms var(--ease-out);
+  }
+
+  .field select:hover,
+  .field input:hover {
+    border-color: rgba(31, 120, 117, 0.26);
+    background: rgba(255, 255, 255, 0.92);
   }
 
   .field select {
@@ -818,96 +1262,201 @@ const fallbackGroups = archiveYears.map((year) => ({
   .field select:focus-visible,
   .field input:focus-visible {
     border-color: rgba(31, 120, 117, 0.5);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.6),
+      0 0 0 3px rgba(31, 120, 117, 0.12);
   }
 
   .tag-advanced {
-    border: 1px dashed rgba(218, 205, 184, 0.96);
-    border-radius: 14px;
-    padding: 0.8rem;
-    display: grid;
-    gap: 0.7rem;
-    background: rgba(255, 255, 255, 0.36);
+    gap: 0.9rem;
+  }
+
+  .tag-block-inline {
+    margin-top: 0.15rem;
   }
 
   .tag-advanced-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.6rem;
-  }
-
-  .tag-title {
-    margin: 0;
-    color: var(--text-soft);
-    font-size: 0.88rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    font-family: "IBM Plex Mono", monospace;
+    align-items: end;
   }
 
   .tag-clear-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
     border: 1px solid rgba(31, 120, 117, 0.3);
     background: rgba(31, 120, 117, 0.08);
     color: var(--accent-cyan);
     border-radius: 999px;
-    min-height: 1.95rem;
-    padding: 0.2rem 0.65rem;
+    min-height: 2rem;
+    padding: 0.24rem 0.72rem;
     font-size: 0.78rem;
     font-weight: 600;
     cursor: pointer;
     transition:
       transform 220ms var(--ease-out),
       border-color 220ms var(--ease-out),
-      background 220ms var(--ease-out);
+      background 220ms var(--ease-out),
+      box-shadow 220ms var(--ease-out);
   }
 
   .tag-clear-btn:hover {
     transform: translateY(-1px);
     border-color: rgba(31, 120, 117, 0.46);
     background: rgba(31, 120, 117, 0.14);
+    box-shadow: 0 8px 18px rgba(31, 120, 117, 0.12);
   }
 
   .tag-chip-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 0.48rem 1rem;
+    align-items: stretch;
+    padding-top: 0.12rem;
   }
 
-  .tag-chip {
-    border: 1px solid rgba(31, 120, 117, 0.24);
-    background: rgba(31, 120, 117, 0.06);
-    color: var(--accent-cyan);
-    border-radius: 999px;
-    min-height: 1.9rem;
-    padding: 0.12rem 0.62rem;
-    font-size: 0.78rem;
+  :global(.tag-chip) {
+    --tag-accent: var(--text);
+    --tag-rule: rgba(148, 163, 184, 0.24);
+    --tag-surface: rgba(148, 163, 184, 0.06);
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.8rem;
+    padding: 0.34rem 0.08rem 0.58rem;
+    border-radius: 0;
     cursor: pointer;
     transition:
+      color 220ms var(--ease-out),
       transform 220ms var(--ease-out),
-      border-color 220ms var(--ease-out),
+      opacity 220ms var(--ease-out);
+  }
+
+  :global(.tag-chip)::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(90deg, var(--tag-rule), rgba(148, 163, 184, 0.14), transparent);
+    transition:
       background 220ms var(--ease-out),
-      color 220ms var(--ease-out);
+      transform 220ms var(--ease-out),
+      opacity 220ms var(--ease-out);
+    transform-origin: left center;
   }
 
-  .tag-chip:hover {
-    transform: translateY(-1px);
-    border-color: rgba(31, 120, 117, 0.44);
-    background: rgba(31, 120, 117, 0.12);
+  :global(.tag-chip)::after {
+    content: "";
+    position: absolute;
+    inset: -0.18rem -0.5rem -0.12rem;
+    border-radius: 14px;
+    background: linear-gradient(90deg, var(--tag-surface), transparent 82%);
+    opacity: 0;
+    transform: translateX(-0.16rem);
+    transition:
+      opacity 220ms var(--ease-out),
+      transform 220ms var(--ease-out);
+    z-index: -1;
   }
 
-  .tag-chip.is-active,
-  .tag-chip[aria-pressed="true"] {
-    border-color: rgba(159, 57, 34, 0.44);
-    background: linear-gradient(120deg, rgba(196, 82, 55, 0.24), rgba(196, 82, 55, 0.12));
-    color: var(--accent-strong);
+  :global(.tag-chip-name) {
+    min-width: 0;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+    font-size: 0.98rem;
+    font-weight: 640;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+  }
+
+  :global(.tag-chip-count) {
+    color: var(--text-soft);
+    font-size: 0.72rem;
+    font-family: "IBM Plex Mono", monospace;
+    letter-spacing: 0.12em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  :global(.tag-chip-count)::before {
+    content: "/";
+    margin-right: 0.45rem;
+    opacity: 0.34;
+  }
+
+  :global(.tag-chip-cool) {
+    --tag-accent: var(--accent-cyan);
+    --tag-rule: rgba(31, 120, 117, 0.28);
+    --tag-surface: rgba(31, 120, 117, 0.08);
+  }
+
+  :global(.tag-chip-warm) {
+    --tag-accent: var(--accent-strong);
+    --tag-rule: rgba(196, 82, 55, 0.28);
+    --tag-surface: rgba(196, 82, 55, 0.08);
+  }
+
+  :global(.tag-chip-neutral) {
+    --tag-accent: var(--text);
+    --tag-rule: rgba(100, 116, 139, 0.24);
+    --tag-surface: rgba(100, 116, 139, 0.06);
+  }
+
+  :global(.tag-chip:hover),
+  :global(.tag-chip:focus-visible) {
+    color: var(--tag-accent);
+    transform: translateX(0.12rem);
+  }
+
+  :global(.tag-chip:hover)::after,
+  :global(.tag-chip:focus-visible)::after,
+  :global(.tag-chip.is-active)::after,
+  :global(.tag-chip[aria-pressed="true"])::after {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  :global(.tag-chip:hover)::before,
+  :global(.tag-chip:focus-visible)::before,
+  :global(.tag-chip.is-active)::before,
+  :global(.tag-chip[aria-pressed="true"])::before {
+    background: linear-gradient(90deg, var(--tag-accent), rgba(148, 163, 184, 0.18), transparent);
+  }
+
+  :global(.tag-chip:focus-visible) {
+    outline: none;
+  }
+
+  :global(.tag-chip.is-active),
+  :global(.tag-chip[aria-pressed="true"]) {
+    color: var(--tag-accent);
+  }
+
+  :global(.tag-chip.is-active .tag-chip-count),
+  :global(.tag-chip[aria-pressed="true"] .tag-chip-count),
+  :global(.tag-chip:hover .tag-chip-count),
+  :global(.tag-chip:focus-visible .tag-chip-count) {
+    color: currentColor;
   }
 
   .filter-actions {
-    display: flex;
+    display: grid;
+    gap: 0.9rem;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.7rem;
-    flex-wrap: wrap;
+  }
+
+  .filter-status {
+    display: grid;
+    gap: 0.38rem;
   }
 
   .check-field {
@@ -917,24 +1466,56 @@ const fallbackGroups = archiveYears.map((year) => ({
     color: var(--text-soft);
     font-size: 0.9rem;
     cursor: pointer;
+    width: fit-content;
   }
 
   .check-field input {
     accent-color: var(--accent-cyan);
   }
 
+  .check-field-advanced {
+    min-height: 2.56rem;
+    align-self: end;
+  }
+
+  .filter-hint {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .filter-summary-card {
+    display: grid;
+    gap: 0.28rem;
+    padding: 0.95rem 1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(218, 205, 184, 0.82);
+    background: rgba(255, 255, 255, 0.34);
+  }
+
+  .filter-summary-label {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+  }
+
   .result-summary {
     margin: 0;
-    font-size: 0.9rem;
+    font-size: 0.92rem;
+    line-height: 1.58;
   }
 
   .reset-btn {
+    justify-self: start;
     border-radius: 999px;
     border: 1px solid rgba(159, 57, 34, 0.32);
     background: linear-gradient(120deg, rgba(196, 82, 55, 0.16), rgba(196, 82, 55, 0.06));
     color: var(--accent-strong);
     min-height: 2.2rem;
-    padding: 0.28rem 0.84rem;
+    padding: 0.28rem 0.92rem;
     font-size: 0.84rem;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -942,73 +1523,133 @@ const fallbackGroups = archiveYears.map((year) => ({
     transition:
       transform 220ms var(--ease-out),
       border-color 220ms var(--ease-out),
-      background 220ms var(--ease-out);
+      background 220ms var(--ease-out),
+      box-shadow 220ms var(--ease-out);
   }
 
   .reset-btn:hover {
     transform: translateY(-1px);
     border-color: rgba(159, 57, 34, 0.46);
     background: linear-gradient(120deg, rgba(196, 82, 55, 0.24), rgba(196, 82, 55, 0.12));
+    box-shadow: 0 10px 22px rgba(196, 82, 55, 0.12);
   }
 
   :global([data-archive-output]) {
-    gap: 1rem;
+    gap: 1.2rem;
   }
 
   :global([data-archive-output] .archive-group) {
-    padding: 1rem 1.05rem;
-    border-radius: 18px;
-    border-color: rgba(218, 205, 184, 0.9);
+    position: relative;
+    padding: 1.1rem 1.1rem 1.2rem;
+    border-radius: 24px;
+    border-color: rgba(218, 205, 184, 0.88);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 243, 236, 0.92)),
+      rgba(255, 255, 255, 0.94);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.7),
+      0 22px 46px rgba(28, 22, 12, 0.06);
+    overflow: hidden;
   }
 
   :global([data-archive-output] .archive-heading) {
-    margin: 0 0 0.82rem;
-    font-size: 1.14rem;
-    display: inline-flex;
+    margin: 0 0 1.05rem;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.45rem;
+    gap: 0.7rem;
+  }
+
+  :global([data-archive-output] .archive-heading-text) {
+    font-size: clamp(1.16rem, 1.06rem + 0.34vw, 1.48rem);
     font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+  }
+
+  :global([data-archive-output] .archive-heading-count) {
+    color: var(--text-soft);
+    font-size: 0.73rem;
+    font-family: "IBM Plex Mono", monospace;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
   }
 
   :global([data-archive-output] .archive-dot) {
-    width: 0.52rem;
-    height: 0.52rem;
+    width: 0.62rem;
+    height: 0.62rem;
     border-radius: 50%;
-    background: linear-gradient(120deg, var(--accent), var(--accent-cyan));
-    box-shadow: 0 0 0 4px rgba(196, 82, 55, 0.12);
+    background: linear-gradient(135deg, var(--accent), var(--accent-cyan));
+    box-shadow: 0 0 0 6px rgba(196, 82, 55, 0.1);
   }
 
   :global([data-archive-output] .archive-list) {
+    position: relative;
     margin: 0;
     padding: 0;
     list-style: none;
-    display: grid;
-    gap: 0.68rem;
+  }
+
+  :global([data-archive-output] .archive-list::before) {
+    content: "";
+    position: absolute;
+    left: 0.42rem;
+    top: 0.45rem;
+    bottom: 0.6rem;
+    width: 1px;
+    background: linear-gradient(180deg, rgba(196, 82, 55, 0.22), rgba(31, 120, 117, 0.12), rgba(196, 82, 55, 0));
   }
 
   :global([data-archive-output] .archive-item) {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    border-bottom: 1px dashed rgba(218, 205, 184, 0.96);
-    padding-bottom: 0.6rem;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(7.8rem, 8.8rem) minmax(0, 1fr);
+    grid-template-areas: "meta main";
+    align-items: start;
+    gap: 1.25rem;
+    padding-left: 1.9rem;
   }
 
-  :global([data-archive-output] .archive-item:last-child) {
-    border-bottom: 0;
-    padding-bottom: 0;
+  :global([data-archive-output] .archive-item + .archive-item) {
+    margin-top: 1.22rem;
+    padding-top: 1.22rem;
+  }
+
+  :global([data-archive-output] .archive-item + .archive-item::after) {
+    content: "";
+    position: absolute;
+    left: 1.9rem;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(218, 205, 184, 0.95), rgba(218, 205, 184, 0));
+  }
+
+  :global([data-archive-output] .archive-item::before) {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.38rem;
+    width: 0.82rem;
+    height: 0.82rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-cyan));
+    box-shadow: 0 0 0 6px rgba(196, 82, 55, 0.12);
   }
 
   :global([data-archive-output] .archive-item-main) {
+    grid-area: main;
     display: grid;
-    gap: 0.34rem;
+    gap: 0.46rem;
     min-width: 0;
   }
 
   :global([data-archive-output] .archive-item-main > a) {
     color: var(--text);
-    font-weight: 600;
-    line-height: 1.4;
+    font-size: clamp(1rem, 0.96rem + 0.18vw, 1.16rem);
+    font-weight: 650;
+    letter-spacing: -0.024em;
+    line-height: 1.35;
   }
 
   :global([data-archive-output] .archive-item-main > a:hover) {
@@ -1017,8 +1658,9 @@ const fallbackGroups = archiveYears.map((year) => ({
 
   :global([data-archive-output] .archive-desc) {
     margin: 0;
-    font-size: 0.92rem;
-    line-height: 1.48;
+    max-width: 62ch;
+    font-size: 0.94rem;
+    line-height: 1.62;
   }
 
   :global([data-archive-output] .archive-tags) {
@@ -1027,43 +1669,102 @@ const fallbackGroups = archiveYears.map((year) => ({
     gap: 0.42rem;
   }
 
+  :global([data-archive-output] .archive-info-row) {
+    margin-top: 0.12rem;
+  }
+
+  :global([data-archive-output] .archive-info-chip) {
+    border-radius: 999px;
+    border: 1px solid rgba(196, 82, 55, 0.18);
+    background: rgba(196, 82, 55, 0.06);
+    color: var(--accent-strong);
+    font-size: 0.74rem;
+    padding: 0.16rem 0.54rem;
+    line-height: 1.2;
+  }
+
+  :global([data-archive-output] .archive-info-chip-hidden) {
+    border-color: rgba(86, 198, 194, 0.24);
+    background: rgba(86, 198, 194, 0.1);
+    color: var(--accent-cyan);
+  }
+
   :global([data-archive-output] .archive-tag) {
     border-radius: 999px;
-    border: 1px solid rgba(31, 120, 117, 0.26);
-    background: rgba(31, 120, 117, 0.08);
+    border: 1px solid rgba(31, 120, 117, 0.18);
+    background: rgba(31, 120, 117, 0.06);
     color: var(--accent-cyan);
     font-size: 0.74rem;
-    padding: 0.14rem 0.5rem;
+    padding: 0.16rem 0.54rem;
     line-height: 1.2;
   }
 
   :global([data-archive-output] .archive-tag:hover) {
-    border-color: rgba(31, 120, 117, 0.46);
-    background: rgba(31, 120, 117, 0.14);
+    border-color: rgba(31, 120, 117, 0.34);
+    background: rgba(31, 120, 117, 0.12);
     color: var(--accent-cyan);
   }
 
   :global([data-archive-output] .archive-meta) {
+    grid-area: meta;
     display: grid;
-    justify-items: end;
+    justify-items: start;
     align-content: start;
-    gap: 0.2rem;
-    min-width: 8.6rem;
+    gap: 0.42rem;
+    min-width: 0;
     color: var(--text-soft);
-    font-size: 0.84rem;
-    white-space: nowrap;
+    font-size: 0.76rem;
+    font-family: "IBM Plex Mono", monospace;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: normal;
+    padding-top: 0.12rem;
+  }
+
+  :global([data-archive-output] .archive-meta time) {
+    color: var(--text);
+    font-size: 0.9rem;
+    letter-spacing: 0.03em;
   }
 
   :global([data-archive-output] .updated-note) {
-    font-size: 0.76rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
   }
 
   .empty {
     padding: 1rem;
   }
 
+  @media (min-width: 980px) {
+    .filter-panel-head {
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+      align-items: end;
+      gap: 1rem;
+    }
+
+    .filter-layout {
+      grid-template-columns: minmax(0, 1.34fr) minmax(320px, 0.96fr);
+      align-items: start;
+    }
+
+    .filter-actions {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+
+    .filter-summary-card {
+      min-height: 100%;
+      align-content: center;
+    }
+
+    .reset-btn {
+      justify-self: end;
+    }
+  }
+
   @media (max-width: 1100px) {
-    .filter-grid {
+    .filter-grid,
+    .filter-advanced-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
@@ -1073,7 +1774,8 @@ const fallbackGroups = archiveYears.map((year) => ({
   }
 
   @media (max-width: 760px) {
-    .filter-grid {
+    .filter-grid,
+    .filter-advanced-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
@@ -1081,24 +1783,65 @@ const fallbackGroups = archiveYears.map((year) => ({
       grid-column: span 2;
     }
 
-    .range-grid {
+    .filter-panel-head,
+    .filter-block-head,
+    .filter-actions {
+      gap: 0.75rem;
+    }
+
+    .filter-actions {
       grid-template-columns: 1fr;
     }
 
+    .filter-summary-card,
+    .reset-btn {
+      justify-self: stretch;
+    }
+
+    .tag-chip-list {
+      grid-template-columns: 1fr;
+      gap: 0.32rem;
+    }
+
+    :global(.tag-chip) {
+      gap: 0.65rem;
+      padding: 0.28rem 0.04rem 0.5rem;
+      transform: none;
+    }
+
+    :global([data-archive-output] .archive-heading) {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    :global([data-archive-output] .archive-heading-count) {
+      justify-self: end;
+    }
+
+    :global([data-archive-output] .archive-list::before) {
+      left: 0.38rem;
+    }
+
     :global([data-archive-output] .archive-item) {
-      flex-direction: column;
-      align-items: flex-start;
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "meta"
+        "main";
+      gap: 0.7rem;
+      padding-left: 1.45rem;
+    }
+
+    :global([data-archive-output] .archive-item + .archive-item::after) {
+      left: 1.45rem;
     }
 
     :global([data-archive-output] .archive-meta) {
-      justify-items: start;
-      min-width: auto;
-      white-space: normal;
+      padding-top: 0;
     }
   }
 
   @media (max-width: 480px) {
-    .filter-grid {
+    .filter-grid,
+    .filter-advanced-grid {
       grid-template-columns: 1fr;
     }
 
@@ -1109,6 +1852,21 @@ const fallbackGroups = archiveYears.map((year) => ({
 
   :global(html[data-theme="dark"]) .filter-panel {
     border-color: rgba(45, 59, 75, 0.95);
+    background:
+      linear-gradient(180deg, rgba(23, 32, 44, 0.78), rgba(17, 24, 34, 0.46)),
+      linear-gradient(160deg, rgba(18, 26, 36, 0.84), rgba(13, 20, 30, 0.58));
+    box-shadow: 0 26px 58px rgba(2, 6, 12, 0.28);
+  }
+
+  :global(html[data-theme="dark"]) .filter-panel-head {
+    border-bottom-color: rgba(45, 59, 75, 0.95);
+  }
+
+  :global(html[data-theme="dark"]) .filter-block,
+  :global(html[data-theme="dark"]) .filter-advanced,
+  :global(html[data-theme="dark"]) .filter-summary-card {
+    border-color: rgba(45, 59, 75, 0.95);
+    background: rgba(16, 24, 34, 0.46);
   }
 
   :global(html[data-theme="dark"]) .field select,
@@ -1116,16 +1874,21 @@ const fallbackGroups = archiveYears.map((year) => ({
     border-color: rgba(45, 59, 75, 0.95);
     background: rgba(16, 24, 34, 0.84);
     color: var(--text);
+    box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04);
+  }
+
+  :global(html[data-theme="dark"]) .field select:hover,
+  :global(html[data-theme="dark"]) .field input:hover {
+    border-color: rgba(86, 198, 194, 0.24);
+    background: rgba(16, 24, 34, 0.92);
   }
 
   :global(html[data-theme="dark"]) .field select:focus-visible,
   :global(html[data-theme="dark"]) .field input:focus-visible {
     border-color: rgba(86, 198, 194, 0.56);
-  }
-
-  :global(html[data-theme="dark"]) .tag-advanced {
-    border-color: rgba(45, 59, 75, 0.95);
-    background: rgba(16, 24, 34, 0.62);
+    box-shadow:
+      inset 0 1px 0 rgba(148, 163, 184, 0.04),
+      0 0 0 3px rgba(86, 198, 194, 0.14);
   }
 
   :global(html[data-theme="dark"]) .tag-clear-btn {
@@ -1137,24 +1900,59 @@ const fallbackGroups = archiveYears.map((year) => ({
   :global(html[data-theme="dark"]) .tag-clear-btn:hover {
     border-color: rgba(86, 198, 194, 0.54);
     background: rgba(86, 198, 194, 0.22);
+    box-shadow: none;
   }
 
-  :global(html[data-theme="dark"]) .tag-chip {
-    border-color: rgba(86, 198, 194, 0.32);
-    background: rgba(86, 198, 194, 0.08);
-    color: var(--accent-cyan-soft);
+  :global(html[data-theme="dark"] .tag-chip) {
+    color: #e8eef7;
   }
 
-  :global(html[data-theme="dark"]) .tag-chip:hover {
-    border-color: rgba(86, 198, 194, 0.48);
-    background: rgba(86, 198, 194, 0.16);
+  :global(html[data-theme="dark"] .tag-chip-count) {
+    color: #9aa5b7;
   }
 
-  :global(html[data-theme="dark"]) .tag-chip.is-active,
-  :global(html[data-theme="dark"]) .tag-chip[aria-pressed="true"] {
-    border-color: rgba(241, 141, 85, 0.56);
-    background: linear-gradient(120deg, rgba(241, 141, 85, 0.28), rgba(241, 141, 85, 0.14));
-    color: var(--accent-strong);
+  :global(html[data-theme="dark"] .tag-chip-cool) {
+    --tag-accent: var(--accent-cyan-soft);
+    --tag-rule: rgba(86, 198, 194, 0.34);
+    --tag-surface: rgba(86, 198, 194, 0.12);
+  }
+
+  :global(html[data-theme="dark"] .tag-chip-warm) {
+    --tag-accent: #f7bb94;
+    --tag-rule: rgba(241, 141, 85, 0.34);
+    --tag-surface: rgba(241, 141, 85, 0.12);
+  }
+
+  :global(html[data-theme="dark"] .tag-chip-neutral) {
+    --tag-accent: #dfe7f4;
+    --tag-rule: rgba(100, 116, 139, 0.36);
+    --tag-surface: rgba(100, 116, 139, 0.14);
+  }
+
+  :global(html[data-theme="dark"] .tag-chip:hover),
+  :global(html[data-theme="dark"] .tag-chip:focus-visible),
+  :global(html[data-theme="dark"] .tag-chip.is-active),
+  :global(html[data-theme="dark"] .tag-chip[aria-pressed="true"]) {
+    color: var(--tag-accent);
+  }
+
+  :global(html[data-theme="dark"] .tag-chip.is-active)::before,
+  :global(html[data-theme="dark"] .tag-chip[aria-pressed="true"])::before,
+  :global(html[data-theme="dark"] .tag-chip:hover)::before,
+  :global(html[data-theme="dark"] .tag-chip:focus-visible)::before {
+    background: linear-gradient(90deg, var(--tag-accent), rgba(100, 116, 139, 0.24), transparent);
+  }
+
+  :global(html[data-theme="dark"] .tag-chip.is-active)::after,
+  :global(html[data-theme="dark"] .tag-chip[aria-pressed="true"])::after {
+    background: linear-gradient(90deg, var(--tag-surface), rgba(15, 23, 42, 0) 82%);
+  }
+
+  :global(html[data-theme="dark"] .tag-chip.is-active .tag-chip-count),
+  :global(html[data-theme="dark"] .tag-chip[aria-pressed="true"] .tag-chip-count),
+  :global(html[data-theme="dark"] .tag-chip:hover .tag-chip-count),
+  :global(html[data-theme="dark"] .tag-chip:focus-visible .tag-chip-count) {
+    color: currentColor;
   }
 
   :global(html[data-theme="dark"]) .reset-btn {
@@ -1165,18 +1963,37 @@ const fallbackGroups = archiveYears.map((year) => ({
   :global(html[data-theme="dark"]) .reset-btn:hover {
     border-color: rgba(241, 141, 85, 0.58);
     background: linear-gradient(120deg, rgba(241, 141, 85, 0.3), rgba(241, 141, 85, 0.16));
+    box-shadow: none;
   }
 
   :global(html[data-theme="dark"] [data-archive-output] .archive-group) {
     border-color: rgba(45, 59, 75, 0.95);
+    background: linear-gradient(180deg, rgba(16, 22, 29, 0.94), rgba(9, 13, 18, 0.92));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  }
+
+  :global(html[data-theme="dark"] [data-archive-output] .archive-heading-count) {
+    color: #9aa5b7;
+  }
+
+  :global(html[data-theme="dark"] [data-archive-output] .archive-list::before) {
+    background: linear-gradient(180deg, rgba(241, 141, 85, 0.28), rgba(86, 198, 194, 0.16), rgba(86, 198, 194, 0));
   }
 
   :global(html[data-theme="dark"] [data-archive-output] .archive-dot) {
-    box-shadow: 0 0 0 4px rgba(241, 141, 85, 0.2);
+    box-shadow: 0 0 0 6px rgba(241, 141, 85, 0.18);
   }
 
-  :global(html[data-theme="dark"] [data-archive-output] .archive-item) {
-    border-bottom-color: rgba(45, 59, 75, 0.95);
+  :global(html[data-theme="dark"] [data-archive-output] .archive-item + .archive-item::after) {
+    background: linear-gradient(90deg, rgba(45, 59, 75, 0.95), rgba(45, 59, 75, 0));
+  }
+
+  :global(html[data-theme="dark"] [data-archive-output] .archive-item::before) {
+    box-shadow: 0 0 0 6px rgba(241, 141, 85, 0.16);
+  }
+
+  :global(html[data-theme="dark"] [data-archive-output] .archive-meta time) {
+    color: #edf1f7;
   }
 
   :global(html[data-theme="dark"] [data-archive-output] .archive-tag) {
@@ -1188,6 +2005,18 @@ const fallbackGroups = archiveYears.map((year) => ({
   :global(html[data-theme="dark"] [data-archive-output] .archive-tag:hover) {
     border-color: rgba(86, 198, 194, 0.52);
     background: rgba(86, 198, 194, 0.2);
+    color: var(--accent-cyan-soft);
+  }
+
+  :global(html[data-theme="dark"] [data-archive-output] .archive-info-chip) {
+    border-color: rgba(241, 141, 85, 0.36);
+    background: rgba(241, 141, 85, 0.14);
+    color: var(--accent-strong);
+  }
+
+  :global(html[data-theme="dark"] [data-archive-output] .archive-info-chip-hidden) {
+    border-color: rgba(86, 198, 194, 0.34);
+    background: rgba(86, 198, 194, 0.14);
     color: var(--accent-cyan-soft);
   }
 </style>

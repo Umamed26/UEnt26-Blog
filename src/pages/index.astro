@@ -1,384 +1,650 @@
 ---
-import BaseLayout from "@/layouts/BaseLayout.astro";
-import Pagination from "@/components/Pagination.astro";
 import PostCard from "@/components/PostCard.astro";
-import TagPill from "@/components/TagPill.astro";
+import ProjectCard from "@/components/ProjectCard.astro";
+import TagCloud from "@/components/TagCloud.astro";
 import { siteConfig } from "@/config/site";
+import BaseLayout from "@/layouts/BaseLayout.astro";
 import { withBasePath } from "@/utils/paths";
-import {
-  getAllPublishedPosts,
-  getTagsWithCount,
-  splitFeaturedAndFeedPosts,
-  tagToUrlSegment
-} from "@/utils/posts";
+import { getAllPublishedPosts, getTagsWithCount, splitFeaturedAndFeedPosts, tagToUrlSegment } from "@/utils/posts";
+import { getAllProjects } from "@/utils/projects";
+import { getCurrentNowSnapshot } from "@/utils/now";
 
-const allPosts = await getAllPublishedPosts({ includeHidden: true });
-const { featured, feed } = splitFeaturedAndFeedPosts(allPosts, siteConfig.featuredCount);
-const totalPages = Math.max(1, Math.ceil(feed.length / siteConfig.postsPerPage));
-const pagePosts = feed.slice(0, siteConfig.postsPerPage);
-const tagsWithCount = getTagsWithCount(allPosts);
-const hotTags = tagsWithCount.slice(0, 20);
-const latestPost = allPosts[0];
-const latestDate = latestPost ? latestPost.data.updatedDate ?? latestPost.data.pubDate : undefined;
+const posts = await getAllPublishedPosts();
+const tagPosts = await getAllPublishedPosts({ includeHidden: true });
+const projects = await getAllProjects();
+const nowSnapshot = await getCurrentNowSnapshot();
+
+const { featured, feed } = splitFeaturedAndFeedPosts(posts, siteConfig.featuredCount);
+const latestPosts = feed.slice(0, 4);
+const featuredProjects = projects.filter((project) => project.data.featured).slice(0, 3);
+const recentProjects = featuredProjects.length > 0 ? featuredProjects : projects.slice(0, 3);
+const hotTags = getTagsWithCount(tagPosts).slice(0, 12);
+
+const recentDates = [
+  posts[0]?.data.updatedDate ?? posts[0]?.data.pubDate,
+  projects.find((project) => project.data.updatedDate)?.data.updatedDate,
+  nowSnapshot.updatedDate
+].filter(Boolean) as Date[];
+
+const latestSiteDate = recentDates.sort((left, right) => right.getTime() - left.getTime())[0];
+
 const heroStats = [
-  { label: "文章总数", value: String(allPosts.length).padStart(2, "0") },
-  { label: "标签数量", value: String(tagsWithCount.length).padStart(2, "0") },
-  { label: "最近更新", value: latestDate ? latestDate.toLocaleDateString("zh-CN") : "暂无" }
+  { label: "文章数量", value: String(posts.length).padStart(2, "0") },
+  { label: "项目数量", value: String(projects.length).padStart(2, "0") },
+  { label: "最近更新", value: latestSiteDate ? latestSiteDate.toLocaleDateString("zh-CN") : "暂无" }
+];
+
+const experimentLinks = [
+  {
+    title: "Console",
+    desc: "终端风格的文章导航器。现在保留为实验入口，不再放在主导航里。",
+    href: withBasePath("/console/"),
+    action: "打开实验"
+  },
+  {
+    title: "Guestbook",
+    desc: "如果你是回访用户，留言板仍然是最快的反馈入口。",
+    href: withBasePath("/guestbook/"),
+    action: "去留言"
+  },
+  {
+    title: "RSS",
+    desc: "更新节奏稳定以后，订阅会比偶遇首页更可靠。",
+    href: withBasePath("/rss.xml"),
+    action: "订阅更新"
+  }
 ];
 ---
 
 <BaseLayout>
-  <section class="surface hero" data-reveal>
-    <div class="hero-main stack">
-      <p class="section-kicker">Independent Frontend Journal</p>
-      <h1 class="page-title">{siteConfig.title}</h1>
-      <p class="muted intro">{siteConfig.description}</p>
-      <div class="hero-links">
-        <a class="hero-primary" href={withBasePath("/archive/")}>阅读全部文章</a>
-        <a class="hero-secondary" href={withBasePath("/about/")}>关于作者</a>
-      </div>
-    </div>
-
-    <aside class="hero-panel" aria-label="站点概览">
-      <p class="panel-title">站点概览</p>
-      <dl class="hero-stats">
-        {heroStats.map((item) => (
-          <div class="stat-item">
-            <dt>{item.label}</dt>
-            <dd>{item.value}</dd>
-          </div>
-        ))}
-      </dl>
-      <p class="panel-note">偶尔聊点技术和游戏，持续更新中。</p>
-    </aside>
-  </section>
-
-  {featured.length > 0 && (
-    <section class="stack section-gap" aria-labelledby="featured-title" data-reveal style="--reveal-delay: 80ms;">
-      <div class="section-head">
-        <div>
-          <p class="section-kicker">Featured Dispatches</p>
-          <h2 id="featured-title" class="section-title">精选文章</h2>
-          <p class="muted section-sub">优先推荐近期最值得阅读的内容。</p>
+  <div class="home-page stack">
+    <section class="surface hero" data-reveal>
+      <div class="hero-main stack">
+        <p class="section-kicker">Personal Site / Writing / Projects</p>
+        <h1 class="page-title">{siteConfig.title}</h1>
+        <p class="muted intro">
+          这里先是一个值得读的个人博客，然后才是项目索引和实验游乐场。先把内容讲清楚，再把能力和个性慢慢展开。
+        </p>
+        <div class="hero-links">
+          <a class="hero-primary" href={withBasePath("/archive/")}>先看文章</a>
+          <a class="hero-secondary" href={withBasePath("/projects/")}>再看项目</a>
         </div>
       </div>
-      <div class="bento-grid">
-        {featured[0] && (
-          <div class="bento-main">
-            <PostCard post={featured[0]} variant="featured-main" />
-          </div>
-        )}
-        {featured.slice(1).map((post) => (
-          <PostCard post={post} variant="featured-side" />
-        ))}
-      </div>
+
+      <aside class="hero-panel" aria-label="站点概览">
+        <p class="panel-title">站点概览</p>
+        <dl class="hero-stats">
+          {heroStats.map((item) => (
+            <div class="stat-item">
+              <dt>{item.label}</dt>
+              <dd>{item.value}</dd>
+            </div>
+          ))}
+        </dl>
+        <div class="hero-panel-links">
+          <a href={withBasePath("/search/")}>搜索内容</a>
+          <a href={withBasePath("/now/")}>查看近况</a>
+        </div>
+      </aside>
     </section>
-  )}
 
-  <section class="stack section-gap" aria-labelledby="latest-title" data-reveal style="--reveal-delay: 120ms;">
-    <div class="section-head">
-      <div>
-        <p class="section-kicker">Latest Feed</p>
-        <h2 id="latest-title" class="section-title">最新文章</h2>
-        <p class="muted section-sub">按时间顺序浏览全部更新。</p>
-      </div>
-      <a class="link" href={withBasePath("/archive/")}>全部文章</a>
-    </div>
+    {featured.length > 0 && (
+      <section class="home-band stack" aria-labelledby="featured-title" data-reveal style="--reveal-delay: 60ms;">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Featured Dispatches</p>
+            <h2 id="featured-title" class="section-title">精选文章</h2>
+          </div>
+          <a class="link" href={withBasePath("/archive/")}>全部文章</a>
+        </div>
+        <div class="featured-grid">
+          {featured[0] && (
+            <div class="featured-main">
+              <PostCard post={featured[0]} variant="featured-main" />
+            </div>
+          )}
+          {featured.slice(1).map((post) => (
+            <PostCard post={post} variant="featured-side" />
+          ))}
+        </div>
+      </section>
+    )}
 
-    {pagePosts.length > 0 ? (
-      <>
+    {latestPosts.length > 0 && (
+      <section class="home-band stack" data-reveal style="--reveal-delay: 110ms;">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Latest Notes</p>
+            <h2 class="section-title">最新文章</h2>
+          </div>
+          <a class="link" href={withBasePath("/archive/")}>继续浏览</a>
+        </div>
         <div class="post-grid">
-          {pagePosts.map((post) => (
+          {latestPosts.map((post) => (
             <PostCard post={post} />
           ))}
         </div>
-        <Pagination
-          currentPage={1}
-          totalPages={totalPages}
-          baseUrl="/page"
-          firstPageUrl="/"
-        />
-      </>
-    ) : (
-      <p class="surface empty muted">更多文章正在路上。你可以先看精选内容，或在 <code>src/content/posts</code> 新增 Markdown。</p>
+      </section>
     )}
-  </section>
 
-  <section class="stack section-gap" aria-labelledby="tag-title" data-reveal style="--reveal-delay: 160ms;">
-    <div>
-      <p class="section-kicker">Taxonomy</p>
-      <h2 id="tag-title" class="section-title">标签</h2>
-    </div>
-    {hotTags.length > 0 ? (
-      <div class="tag-list">
-        {hotTags.map((item) => (
-          <TagPill
-            tag={item.tag}
-            count={item.count}
-            href={withBasePath(`/tags/${tagToUrlSegment(item.tag)}/`)}
-          />
-        ))}
-      </div>
-    ) : (
-      <p class="muted">暂无标签。</p>
+    {recentProjects.length > 0 && (
+      <section class="home-band stack" data-reveal style="--reveal-delay: 160ms;">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Recent Projects</p>
+            <h2 class="section-title">近期项目</h2>
+          </div>
+          <a class="link" href={withBasePath("/projects/")}>全部项目</a>
+        </div>
+        <div class="project-grid">
+          {recentProjects.map((project) => (
+            <ProjectCard project={project} variant="compact" />
+          ))}
+        </div>
+      </section>
     )}
-  </section>
+
+    <section class="surface now-panel" data-reveal style="--reveal-delay: 210ms;">
+      <div class="section-head now-head">
+        <div>
+          <p class="section-kicker">Now Snapshot</p>
+          <h2 class="section-title">最近在推进什么</h2>
+        </div>
+        <a class="link" href={withBasePath("/now/")}>完整 Now</a>
+      </div>
+      <p class="muted now-copy">{nowSnapshot.description}</p>
+
+      <div class="now-grid">
+        {nowSnapshot.focusItems.length > 0 && (
+          <section class="now-card">
+            <p class="now-label">当前重心</p>
+            <div class="now-focus-list">
+              {nowSnapshot.focusItems.slice(0, 2).map((item) => (
+                <article>
+                  <h3>{item.title}</h3>
+                  <p class="muted">{item.detail}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {nowSnapshot.currentItems.length > 0 && (
+          <section class="now-card">
+            <p class="now-label">正在推进</p>
+            <ul class="now-list">
+              {nowSnapshot.currentItems.slice(0, 4).map((item) => <li>{item}</li>)}
+            </ul>
+          </section>
+        )}
+
+        {nowSnapshot.nextItems.length > 0 && (
+          <section class="now-card">
+            <p class="now-label">下一步</p>
+            <ul class="now-list">
+              {nowSnapshot.nextItems.slice(0, 3).map((item) => <li>{item}</li>)}
+            </ul>
+          </section>
+        )}
+      </div>
+
+      {nowSnapshot.quickLinks.length > 0 && (
+        <div class="now-links">
+          {nowSnapshot.quickLinks.slice(0, 4).map((item) => (
+            <a href={withBasePath(item.href)}>{item.label}</a>
+          ))}
+        </div>
+      )}
+    </section>
+
+    <section class="home-bottom" data-reveal style="--reveal-delay: 260ms;">
+      <section class="surface stack tags-panel">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Hot Tags</p>
+            <h2 class="section-title">热门标签</h2>
+          </div>
+          <a class="link" href={withBasePath("/tags/")}>全部标签</a>
+        </div>
+        {hotTags.length > 0 ? (
+          <TagCloud
+            items={hotTags.map((item) => ({
+              ...item,
+              href: `/tags/${tagToUrlSegment(item.tag)}/`
+            }))}
+            ariaLabel="热门标签"
+            variant="home"
+          />
+        ) : (
+          <p class="muted">暂无标签。</p>
+        )}
+      </section>
+
+      <section class="surface stack experiment-panel">
+        <div>
+          <p class="section-kicker">Experiments</p>
+          <h2 class="section-title">实验入口</h2>
+        </div>
+        <div class="experiment-list">
+          {experimentLinks.map((item) => (
+            <article class="experiment-item">
+              <h3>{item.title}</h3>
+              <p class="muted">{item.desc}</p>
+              <a href={item.href}>{item.action}</a>
+            </article>
+          ))}
+        </div>
+      </section>
+    </section>
+  </div>
 </BaseLayout>
 
 <style>
+  .home-page {
+    gap: 1.35rem;
+  }
+
+  .hero,
+  .now-panel,
+  .tags-panel,
+  .experiment-panel {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    padding: clamp(1.05rem, 2vw, 1.5rem);
+    border-radius: 32px;
+    border: 1px solid rgba(214, 202, 184, 0.76);
+    background:
+      radial-gradient(circle at 100% 0%, rgba(31, 120, 117, 0.12), transparent 28%),
+      radial-gradient(circle at 0% 0%, rgba(196, 82, 55, 0.1), transparent 22%),
+      linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(248, 243, 235, 0.94) 60%, rgba(242, 246, 247, 0.9));
+    box-shadow:
+      0 24px 54px rgba(27, 24, 18, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  }
+
+  .hero::before,
+  .now-panel::before,
+  .tags-panel::before,
+  .experiment-panel::before {
+    content: "";
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(196, 82, 55, 0.4), rgba(31, 120, 117, 0.28), transparent);
+    opacity: 0.82;
+    pointer-events: none;
+  }
+
+  .tags-panel {
+    padding-top: 0.88rem;
+    gap: 0.9rem;
+    align-content: start;
+  }
+
+  .tags-panel::before {
+    top: 0.68rem;
+  }
+
   .hero {
-    padding: clamp(1.2rem, 3vw, 1.8rem);
     display: grid;
-    gap: 1rem;
-    align-items: stretch;
-    min-height: min(66vh, 500px);
-    border-radius: var(--radius-lg);
+    gap: 1.35rem;
   }
 
   .hero-main {
-    gap: 0.9rem;
-    max-width: 56ch;
-    align-content: center;
+    gap: 1rem;
   }
 
-  .intro {
+  .intro,
+  .now-copy {
     margin: 0;
-    font-size: clamp(1rem, 1.4vw, 1.08rem);
-    max-width: 48ch;
+    max-width: 64ch;
   }
 
-  .hero-links {
+  .hero-links,
+  .hero-panel-links,
+  .now-links {
     display: flex;
-    gap: 0.75rem;
     flex-wrap: wrap;
+    gap: 0.72rem;
   }
 
-  .hero-links a {
-    border-radius: 999px;
-    min-height: 2.35rem;
-    padding: 0.42rem 0.95rem;
+  .hero-links a,
+  .hero-panel-links a,
+  .now-links a,
+  .experiment-item a {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.92rem;
+    border-radius: 999px;
+    min-height: 2.35rem;
+    padding: 0.34rem 0.92rem;
+    font-size: 0.8rem;
     font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     transition:
       transform 220ms var(--ease-out),
       border-color 220ms var(--ease-out),
-      background 220ms var(--ease-out);
+      background 220ms var(--ease-out),
+      box-shadow 220ms var(--ease-out);
   }
 
-  .hero-links a:hover {
+  .hero-links a:hover,
+  .hero-panel-links a:hover,
+  .now-links a:hover,
+  .experiment-item a:hover {
     transform: translateY(-1px);
   }
 
   .hero-primary {
-    border: 1px solid rgba(159, 57, 34, 0.4);
-    background: linear-gradient(120deg, rgba(196, 82, 55, 0.2), rgba(196, 82, 55, 0.12));
+    border: 1px solid rgba(159, 57, 34, 0.28);
+    background: linear-gradient(120deg, rgba(196, 82, 55, 0.18), rgba(196, 82, 55, 0.08));
     color: var(--accent-strong);
+    box-shadow: 0 12px 24px rgba(196, 82, 55, 0.08);
   }
 
-  .hero-primary:hover {
-    border-color: rgba(159, 57, 34, 0.54);
-    background: linear-gradient(120deg, rgba(196, 82, 55, 0.26), rgba(196, 82, 55, 0.16));
-    color: var(--accent-strong);
-  }
-
-  .hero-secondary {
+  .hero-secondary,
+  .hero-panel-links a,
+  .now-links a,
+  .experiment-item a {
     border: 1px solid rgba(31, 120, 117, 0.28);
-    background: rgba(31, 120, 117, 0.08);
-    color: var(--accent-cyan);
-  }
-
-  .hero-secondary:hover {
-    border-color: rgba(31, 120, 117, 0.46);
-    background: rgba(31, 120, 117, 0.14);
+    background: rgba(255, 255, 255, 0.48);
     color: var(--accent-cyan);
   }
 
   .hero-panel {
-    border-radius: var(--radius-md);
-    border: 1px solid rgba(218, 205, 184, 0.9);
-    background:
-      linear-gradient(160deg, rgba(255, 255, 255, 0.94), rgba(247, 239, 227, 0.9));
-    padding: 1rem;
     display: grid;
-    gap: 0.85rem;
-    align-content: start;
+    gap: 0.95rem;
+    padding: 1.1rem;
+    border-radius: 24px;
+    border: 1px solid rgba(214, 202, 184, 0.72);
+    background:
+      radial-gradient(circle at 100% 0%, rgba(31, 120, 117, 0.09), transparent 32%),
+      linear-gradient(165deg, rgba(255, 255, 255, 0.68), rgba(248, 244, 237, 0.54));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
   }
 
-  .panel-title {
+  .panel-title,
+  .now-label {
     margin: 0;
-    color: var(--accent-cyan);
+    color: var(--text-soft);
+    font-size: 0.72rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     font-family: "IBM Plex Mono", monospace;
-    font-size: 0.74rem;
   }
 
   .hero-stats {
     margin: 0;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.65rem;
+    gap: 0.8rem;
   }
 
   .stat-item {
-    margin: 0;
-    border: 1px solid rgba(218, 205, 184, 0.9);
-    border-radius: 12px;
-    padding: 0.58rem 0.62rem;
-    background: rgba(255, 255, 255, 0.76);
-  }
-
-  dt {
-    font-size: 0.71rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-soft);
-    font-family: "IBM Plex Mono", monospace;
-  }
-
-  dd {
-    margin: 0.38rem 0 0;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text);
-    line-height: 1.3;
-    word-break: break-word;
-  }
-
-  .panel-note {
-    margin: 0;
-    color: var(--text-soft);
-    font-size: 0.89rem;
-  }
-
-  .section-gap {
-    margin-top: 2.4rem;
-  }
-
-  .section-head {
     display: flex;
-    align-items: flex-end;
     justify-content: space-between;
+    align-items: baseline;
+    gap: 0.8rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid rgba(214, 202, 184, 0.62);
+  }
+
+  .stat-item:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .stat-item dt,
+  .stat-item dd {
+    margin: 0;
+  }
+
+  .stat-item dt {
+    color: var(--text-soft);
+  }
+
+  .stat-item dd {
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+    font-size: 1.14rem;
+    letter-spacing: -0.04em;
+    color: var(--text);
+  }
+
+  .home-band {
     gap: 1rem;
   }
 
-  .section-sub {
-    margin: 0.4rem 0 0;
-    font-size: 0.92rem;
+  .section-head,
+  .now-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.9rem;
+    align-items: end;
+    flex-wrap: wrap;
   }
 
   .link {
-    font-size: 0.92rem;
-    color: var(--accent-cyan);
-    border: 1px solid rgba(31, 120, 117, 0.3);
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.1rem;
+    padding: 0.26rem 0.72rem;
     border-radius: 999px;
-    padding: 0.28rem 0.7rem;
-    transition:
-      border-color 220ms var(--ease-out),
-      background 220ms var(--ease-out);
+    border: 1px solid rgba(31, 120, 117, 0.22);
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--accent-cyan);
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .link:hover {
-    border-color: rgba(31, 120, 117, 0.46);
+    border-color: rgba(31, 120, 117, 0.42);
     background: rgba(31, 120, 117, 0.08);
-    color: var(--accent-cyan);
   }
 
-  .bento-grid {
+  .featured-grid,
+  .project-grid,
+  .post-grid,
+  .now-grid,
+  .home-bottom,
+  .experiment-list {
     display: grid;
-    gap: 0.95rem;
+    gap: 1.1rem;
   }
 
-  .tag-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.55rem;
+  .now-card {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border-radius: 24px;
+    border: 1px solid rgba(214, 202, 184, 0.72);
+    background:
+      radial-gradient(circle at 100% 0%, rgba(31, 120, 117, 0.08), transparent 30%),
+      linear-gradient(165deg, rgba(255, 255, 255, 0.72), rgba(247, 243, 235, 0.54));
+    box-shadow:
+      0 18px 34px rgba(27, 24, 18, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.76);
+    padding: 1.05rem;
+    display: grid;
+    gap: 0.8rem;
+    transition:
+      transform 240ms var(--ease-out),
+      box-shadow 240ms var(--ease-out),
+      border-color 220ms var(--ease-out);
   }
 
-  .empty {
-    padding: 1rem;
+  .now-card::before,
+  .experiment-item::before {
+    content: "";
+    position: absolute;
+    top: 0.9rem;
+    left: 1rem;
+    right: 1rem;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(31, 120, 117, 0.34), rgba(196, 82, 55, 0.24), transparent);
+    opacity: 0.8;
+    pointer-events: none;
   }
 
-  @media (min-width: 980px) {
+  .now-card:hover,
+  .experiment-item:hover {
+    transform: translateY(-4px);
+    border-color: rgba(186, 170, 148, 0.86);
+    box-shadow: 0 22px 42px rgba(27, 24, 18, 0.1);
+  }
+
+  .now-focus-list,
+  .now-list {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+  }
+
+  .now-focus-list article {
+    display: grid;
+    gap: 0.32rem;
+    padding-top: 0.68rem;
+    border-top: 1px solid rgba(214, 202, 184, 0.46);
+  }
+
+  .now-focus-list article:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .now-focus-list h3,
+  .experiment-item h3 {
+    margin: 0;
+    font-size: 1.04rem;
+    font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+    letter-spacing: -0.03em;
+  }
+
+  .now-focus-list p,
+  .experiment-item p {
+    margin: 0;
+  }
+
+  .now-list {
+    padding-left: 1.1rem;
+    color: var(--text-soft);
+  }
+
+  .experiment-item {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    display: grid;
+    gap: 0.7rem;
+    padding: 1.05rem;
+    border-radius: 24px;
+    border: 1px solid rgba(214, 202, 184, 0.72);
+    background:
+      radial-gradient(circle at 100% 0%, rgba(31, 120, 117, 0.08), transparent 30%),
+      linear-gradient(165deg, rgba(255, 255, 255, 0.72), rgba(247, 243, 235, 0.54));
+    box-shadow:
+      0 18px 34px rgba(27, 24, 18, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.76);
+  }
+
+  .experiment-item a {
+    margin-top: auto;
+  }
+
+  @media (min-width: 960px) {
     .hero {
-      grid-template-columns: 1.15fr 0.85fr;
+      grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+      align-items: start;
     }
 
-    .bento-grid {
-      grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-      grid-template-rows: repeat(2, minmax(0, 1fr));
+    .featured-grid {
+      grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(0, 1fr));
+      align-items: stretch;
     }
 
-    .bento-main {
-      grid-row: 1 / span 2;
+    .now-grid,
+    .home-bottom,
+    .experiment-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .home-bottom {
+      align-items: start;
     }
   }
 
-  @media (max-width: 979px) {
-    .hero-stats {
+  @media (min-width: 900px) {
+    .post-grid,
+    .project-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
-  @media (max-width: 760px) {
-    .hero-stats {
-      grid-template-columns: 1fr;
+  @media (max-width: 680px) {
+    .section-head,
+    .now-head {
+      align-items: start;
     }
 
-    .section-head {
-      align-items: flex-start;
-      flex-direction: column;
+    .hero-links a,
+    .hero-panel-links a,
+    .now-links a,
+    .experiment-item a {
+      width: 100%;
     }
+  }
+
+  :global(html[data-theme="dark"]) .hero-panel,
+  :global(html[data-theme="dark"]) .now-card,
+  :global(html[data-theme="dark"]) .experiment-item {
+    border-color: rgba(45, 59, 75, 0.95);
+    background:
+      radial-gradient(circle at 100% 0%, rgba(86, 198, 194, 0.12), transparent 32%),
+      linear-gradient(165deg, rgba(18, 28, 39, 0.82), rgba(14, 22, 32, 0.68));
+    box-shadow:
+      0 20px 44px rgba(0, 0, 0, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  :global(html[data-theme="dark"]) .hero,
+  :global(html[data-theme="dark"]) .now-panel,
+  :global(html[data-theme="dark"]) .tags-panel,
+  :global(html[data-theme="dark"]) .experiment-panel {
+    border-color: rgba(45, 59, 75, 0.95);
+    background:
+      radial-gradient(circle at 100% 0%, rgba(86, 198, 194, 0.14), transparent 30%),
+      radial-gradient(circle at 0% 0%, rgba(241, 141, 85, 0.1), transparent 22%),
+      linear-gradient(160deg, rgba(22, 31, 43, 0.98), rgba(16, 23, 33, 0.94) 58%, rgba(12, 19, 28, 0.96));
+    box-shadow:
+      0 26px 58px rgba(0, 0, 0, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  :global(html[data-theme="dark"]) .stat-item {
+    border-bottom-color: rgba(45, 59, 75, 0.9);
   }
 
   :global(html[data-theme="dark"]) .hero-primary {
-    border-color: rgba(241, 141, 85, 0.42);
-    background: linear-gradient(120deg, rgba(241, 141, 85, 0.22), rgba(241, 141, 85, 0.1));
+    border-color: rgba(241, 141, 85, 0.38);
+    background: linear-gradient(120deg, rgba(241, 141, 85, 0.2), rgba(241, 141, 85, 0.08));
   }
 
-  :global(html[data-theme="dark"]) .hero-primary:hover {
-    border-color: rgba(241, 141, 85, 0.58);
-    background: linear-gradient(120deg, rgba(241, 141, 85, 0.3), rgba(241, 141, 85, 0.16));
-  }
-
-  :global(html[data-theme="dark"]) .hero-secondary {
+  :global(html[data-theme="dark"]) .hero-secondary,
+  :global(html[data-theme="dark"]) .hero-panel-links a,
+  :global(html[data-theme="dark"]) .now-links a,
+  :global(html[data-theme="dark"]) .experiment-item a {
     border-color: rgba(86, 198, 194, 0.34);
     background: rgba(86, 198, 194, 0.12);
     color: var(--accent-cyan-soft);
   }
 
-  :global(html[data-theme="dark"]) .hero-secondary:hover {
-    border-color: rgba(86, 198, 194, 0.52);
-    background: rgba(86, 198, 194, 0.2);
-    color: var(--accent-cyan-soft);
-  }
-
-  :global(html[data-theme="dark"]) .hero-panel {
-    border-color: rgba(45, 59, 75, 0.95);
-    background: linear-gradient(160deg, rgba(26, 36, 48, 0.95), rgba(18, 26, 36, 0.9));
-  }
-
-  :global(html[data-theme="dark"]) .stat-item {
-    border-color: rgba(45, 59, 75, 0.95);
-    background: rgba(15, 23, 33, 0.86);
-  }
-
   :global(html[data-theme="dark"]) .link {
-    border-color: rgba(86, 198, 194, 0.34);
-  }
-
-  :global(html[data-theme="dark"]) .link:hover {
-    border-color: rgba(86, 198, 194, 0.5);
-    background: rgba(86, 198, 194, 0.14);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .hero-links a {
-      animation: none !important;
-      transition: none !important;
-    }
+    border-color: rgba(86, 198, 194, 0.28);
+    background: rgba(86, 198, 194, 0.08);
+    color: var(--accent-cyan-soft);
   }
 </style>

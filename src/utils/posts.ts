@@ -1,5 +1,6 @@
 import { getCollection, type CollectionEntry } from "astro:content";
 import { siteConfig } from "@/config/site";
+import { getPostCategoryLabel, type PostCategory } from "@/config/taxonomy";
 
 export type PostEntry = CollectionEntry<"posts">;
 
@@ -25,9 +26,13 @@ export const normalizeTag = (tag: string) => tag.trim().toLowerCase();
 export const tagToParam = (tag: string) => normalizeTag(tag);
 export const tagToUrlSegment = (tag: string) => encodeURIComponent(normalizeTag(tag));
 export const normalizeUnlockCode = (code?: string) => (code ?? "").trim().toLowerCase();
-
 export const getPostTags = (post: PostEntry): string[] =>
   (post.data.tags ?? []).map(normalizeTag).filter(Boolean);
+
+export const getPostCategory = (post: PostEntry): PostCategory => post.data.category;
+export const getPostCategoryLabelText = (post: PostEntry) => getPostCategoryLabel(post.data.category);
+export const getPostSeries = (post: PostEntry) => post.data.series?.trim() || undefined;
+export const getPostProjectSlug = (post: PostEntry) => post.data.project?.trim() || undefined;
 
 export const isPostPublished = (post: PostEntry): boolean => {
   if (post.data.draft && !import.meta.env.DEV) {
@@ -120,6 +125,9 @@ export const getRelatedPosts = (
 
   const targetTags = new Set(getPostTags(target));
   const targetSlug = target.slug;
+  const targetSeries = getPostSeries(target);
+  const targetProject = getPostProjectSlug(target);
+  const targetCategory = getPostCategory(target);
 
   const related = posts
     .filter((post) => post.slug !== targetSlug)
@@ -130,7 +138,11 @@ export const getRelatedPosts = (
       const unionSize = new Set([...targetTags, ...tags]).size || 1;
       const similarity = overlap / unionSize;
       const recencyBoost = normalizeDate(post.data.pubDate) / 1_000_000_000_000;
-      const score = overlap > 0 ? overlap * 100 + similarity * 10 + recencyBoost : recencyBoost;
+      const sameSeriesBoost = targetSeries && getPostSeries(post) === targetSeries ? 28 : 0;
+      const sameProjectBoost = targetProject && getPostProjectSlug(post) === targetProject ? 22 : 0;
+      const sameCategoryBoost = getPostCategory(post) === targetCategory ? 8 : 0;
+      const score =
+        overlap * 100 + similarity * 10 + sameSeriesBoost + sameProjectBoost + sameCategoryBoost + recencyBoost;
 
       return { post, sharedTags, score };
     })
@@ -160,10 +172,30 @@ export const getTagsWithCount = (posts: PostEntry[]) => {
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, "zh-Hans-CN"));
 };
 
+export const getCategoriesWithCount = (posts: PostEntry[]) => {
+  const map = new Map<PostCategory, number>();
+  for (const post of posts) {
+    const category = getPostCategory(post);
+    map.set(category, (map.get(category) ?? 0) + 1);
+  }
+
+  return [...map.entries()].map(([category, count]) => ({
+    category,
+    label: getPostCategoryLabel(category),
+    count
+  }));
+};
+
 export const getPostsByTag = (posts: PostEntry[], tag: string) => {
   const normalized = normalizeTag(tag);
   return posts.filter((post) => getPostTags(post).includes(normalized));
 };
+
+export const getPostsByCategory = (posts: PostEntry[], category: PostCategory) =>
+  posts.filter((post) => getPostCategory(post) === category);
+
+export const getPostsByProject = (posts: PostEntry[], projectSlug: string) =>
+  posts.filter((post) => getPostProjectSlug(post) === projectSlug);
 
 export const groupPostsByYear = (posts: PostEntry[]): YearArchive[] => {
   const map = new Map<string, PostEntry[]>();
