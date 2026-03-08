@@ -3,7 +3,7 @@ title: "我的跨平台写作方案：Obsidian + 坚果云"
 description: "怎么做到随时随地创作。"
 pubDate: 2026-03-05
 category: "tech"
-series: "writing-workflow"
+series: "workflow"
 tags:
   - tools
 pinned: 2
